@@ -1,0 +1,11 @@
+.git
+.gitignore
+.claude
+.next
+node_modules
+web
+out
+dist
+docs
+.unforce-make-server
+*.log

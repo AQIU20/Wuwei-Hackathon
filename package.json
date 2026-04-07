@@ -1,0 +1,47 @@
+{
+  "name": "unforce-make-server",
+  "version": "0.1.0",
+  "description": "Cloud agent server for Unforce Make, with coding tools and live hardware access.",
+  "scripts": {
+    "dev": "bun --watch src/main/index.ts",
+    "dev:web": "bun --cwd web run dev",
+    "start": "bun src/main/index.ts",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:web": "cd web && bunx tsc --noEmit",
+    "typecheck": "bun run typecheck:node && bun run typecheck:web",
+    "lint": "biome check .",
+    "lint:fix": "biome check --fix .",
+    "format": "biome format --write ."
+  },
+  "engines": {
+    "bun": ">=1.3.5"
+  },
+  "dependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "@mariozechner/pi-ai": "0.64.0",
+    "@mariozechner/pi-coding-agent": "0.64.0",
+    "@sinclair/typebox": "^0.34.48",
+    "@tavily/core": "^0.7.2",
+    "hono": "^4.12.12",
+    "rehype-highlight": "^7.0.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.10",
+    "@electron-toolkit/tsconfig": "^2.0.0",
+    "@tailwindcss/vite": "^4.2.2",
+    "@types/node": "^25.0.3",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^5.1.1",
+    "electron": "^39.2.6",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "react": "^19.2.1",
+    "react-dom": "^19.2.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "tailwindcss": "^4.2.2",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.6"
+  }
+}
