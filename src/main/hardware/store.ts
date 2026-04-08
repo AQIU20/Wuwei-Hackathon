@@ -65,10 +65,13 @@ interface HardwareStoreOptions {
 function parseNodeMetaMap(raw: string | undefined): Record<string, string> {
   if (!raw) return {}
 
+  const trimmed = raw.trim()
+  if (!trimmed) return {}
+
   try {
-    const parsed = JSON.parse(raw) as unknown
+    const parsed = JSON.parse(trimmed) as unknown
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      return {}
+      throw new Error('invalid meta json')
     }
 
     const entries = Object.entries(parsed)
@@ -80,8 +83,29 @@ function parseNodeMetaMap(raw: string | undefined): Record<string, string> {
     }
     return map
   } catch {
-    return {}
+    const map: Record<string, string> = {}
+    for (const token of trimmed.split(',')) {
+      const pair = token.trim()
+      if (!pair) continue
+      const separatorIndex = pair.indexOf(':')
+      if (separatorIndex <= 0) continue
+      const key = pair.slice(0, separatorIndex).trim()
+      const value = pair.slice(separatorIndex + 1).trim()
+      if (key && value) {
+        map[key] = value
+      }
+    }
+    return map
   }
+}
+
+function parseNodeAllowlist(raw: string | undefined): Set<string> | null {
+  if (!raw) return null
+  const ids = raw
+    .split(',')
+    .map((id) => id.trim())
+    .filter(Boolean)
+  return ids.length > 0 ? new Set(ids) : null
 }
 
 function cloneActuatorState(state: ActuatorState): ActuatorState {
@@ -126,12 +150,14 @@ export class HardwareStore {
   private blocks = new Map<string, BlockSnapshot>()
   private cameraScenes = new Map<string, string>()
   private listeners = new Set<Listener>()
+  private readonly nodeAllowlist: Set<string> | null
   private readonly nodeDescriptions: Record<string, string>
   private readonly nodeLabels: Record<string, string>
   private sensorReadings = new Map<string, Record<string, unknown>>()
 
   constructor(options: HardwareStoreOptions = {}) {
     const { seedMockBlocks = true } = options
+    this.nodeAllowlist = parseNodeAllowlist(process.env.HARDWARE_NODE_ALLOWLIST)
     this.nodeLabels = parseNodeMetaMap(process.env.HARDWARE_NODE_LABELS)
     this.nodeDescriptions = parseNodeMetaMap(process.env.HARDWARE_NODE_DESCRIPTIONS)
 
@@ -179,12 +205,14 @@ export class HardwareStore {
   }
 
   getSnapshot(): HardwareSnapshot {
-    const blocks = [...this.blocks.values()].map((block) => ({
-      ...block,
-      latest: this.sensorReadings.get(block.block_id),
-      actuator: this.getActuatorStateForBlock(block.block_id),
-      scene: this.cameraScenes.get(block.block_id),
-    }))
+    const blocks = [...this.blocks.values()]
+      .filter((block) => this.isNodeAllowed(block.block_id))
+      .map((block) => ({
+        ...block,
+        latest: this.sensorReadings.get(block.block_id),
+        actuator: this.getActuatorStateForBlock(block.block_id),
+        scene: this.cameraScenes.get(block.block_id),
+      }))
 
     const metricSource = blocks
       .map((block) => block.latest)
@@ -306,6 +334,12 @@ export class HardwareStore {
   applyMessage(message: HardwareIngressMessage): { ok: boolean; error?: string; ackId: string } {
     const ackId = randomUUID()
 
+    const incomingBlockId =
+      message.type === 'announce' ? message.block.block_id : message.block_id
+    if (!this.isNodeAllowed(incomingBlockId)) {
+      return { ok: true, ackId }
+    }
+
     switch (message.type) {
       case 'announce': {
         const existing = this.blocks.get(message.block.block_id)
@@ -390,6 +424,11 @@ export class HardwareStore {
     }
 
     return undefined
+  }
+
+  private isNodeAllowed(blockId: string): boolean {
+    if (!this.nodeAllowlist) return true
+    return this.nodeAllowlist.has(blockId)
   }
 
   private broadcast(event: HardwareBroadcast): void {
