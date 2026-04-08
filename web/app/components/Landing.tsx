@@ -156,7 +156,7 @@ export function Landing() {
       {/* Gallery marquee — community cards */}
       <GalleryMarquee />
 
-      {/* Smart Space — modules + scenes */}
+      {/* Smart Space — sensors + scenes interleaved */}
       <section className="relative mx-auto max-w-7xl px-6 pb-28 lg:px-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -173,51 +173,46 @@ export function Landing() {
           </h2>
         </motion.div>
 
-        {/* Module images row */}
-        <div className="mb-10 flex flex-wrap justify-center gap-4">
-          {moduleImages.map((mod, i) => (
-            <motion.div
-              key={mod.src}
-              initial={{ opacity: 0, scale: 0.5 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: 0.1 + i * 0.06, duration: 0.5 }}
-            >
+        {/* Interleaved: sensor module → scene, sensor → scene, ... */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+          {t.scenes.items.map((scene, i) => {
+            const mod = moduleImages[i % moduleImages.length];
+            return (
               <motion.div
-                className="drop-shadow-md"
-                animate={{ y: [0, -6, 0, 4, 0], rotate: [-2, 2, -1, 1, -2] }}
-                transition={{ duration: 4 + i * 0.7, repeat: Infinity, ease: "easeInOut" }}
-                whileHover={{ scale: 1.15 }}
+                key={scene.src}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ delay: i * 0.08, duration: 0.5 }}
+                className="contents"
               >
-                <Image src={mod.src} alt={mod.alt} width={64} height={64} className="h-auto w-16" />
+                {/* Sensor module card */}
+                <div className="flex items-center justify-center rounded-xl border border-black/6 bg-black/[0.02] p-6">
+                  <motion.div
+                    className="drop-shadow-md"
+                    animate={{ y: [0, -6, 0, 4, 0], rotate: [-2, 2, -1, 1, -2] }}
+                    transition={{ duration: 4 + i * 0.7, repeat: Infinity, ease: "easeInOut" }}
+                    whileHover={{ scale: 1.15 }}
+                  >
+                    <Image src={mod.src} alt={mod.alt} width={80} height={80} className="h-auto w-20" />
+                  </motion.div>
+                </div>
+                {/* Scene card */}
+                <div className="group overflow-hidden rounded-xl border border-black/8 bg-black/[0.02] transition-colors duration-300 hover:border-black/20">
+                  <div className="relative aspect-[4/3] overflow-hidden">
+                    <Image
+                      src={scene.src}
+                      alt={scene.alt}
+                      fill
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                    />
+                  </div>
+                  <p className="px-2 py-1.5 text-[10px] leading-relaxed text-black/45">{scene.alt}</p>
+                </div>
               </motion.div>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Scene grid */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-          {t.scenes.items.slice(0, 5).map((s, i) => (
-            <motion.div
-              key={s.src}
-              initial={{ opacity: 0, y: 12 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.06, duration: 0.5 }}
-              className="group overflow-hidden rounded-xl border border-black/8 bg-black/[0.02] transition-colors duration-300 hover:border-black/20"
-            >
-              <div className="relative aspect-[4/3] overflow-hidden">
-                <Image
-                  src={s.src}
-                  alt={s.alt}
-                  fill
-                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
-                />
-              </div>
-              <p className="px-2 py-1.5 text-[10px] leading-relaxed text-black/45">{s.alt}</p>
-            </motion.div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
