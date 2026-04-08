@@ -180,7 +180,6 @@ export function ContextMachine() {
   const [email, setEmail] = useState("");
   const [waitlistStatus, setWaitlistStatus] = useState<"idle" | "ok" | "dup">("idle");
   const [posted, setPosted] = useState(false);
-  const [gallery, setGallery] = useState<GalleryItem[]>([]);
 
   // Random seed for card style — changes on each generate
   const [cardSeed, setCardSeed] = useState(0);
@@ -210,18 +209,6 @@ export function ContextMachine() {
 
     setUnlockedTexts(texts);
   }, [active, locale]);
-
-  useEffect(() => { fetchGallery(); }, []);
-
-  async function fetchGallery() {
-    try {
-      const res = await fetch(`${serverUrl}/v1/gallery?limit=50`);
-      if (res.ok) {
-        const data = await res.json();
-        setGallery(data.items || []);
-      }
-    } catch { /* silent */ }
-  }
 
   /* -- Drag -- */
   function handleDragStart(e: React.DragEvent, sensorId: SensorId) {
@@ -280,7 +267,6 @@ export function ContextMachine() {
         body: JSON.stringify({ username: username || "Anonymous", sensors: active, easterEggs: unlockedTexts, imageBase64: cardImage }),
       });
       setPosted(true);
-      fetchGallery();
     } catch { /* */ }
   }
 
@@ -324,7 +310,7 @@ export function ContextMachine() {
               <button
                 key={v}
                 onClick={() => { setSelectedVibe(v); setCardImage(null); }}
-                className={`rounded-full border-2 px-3 py-1.5 text-xs font-medium transition-all ${
+                className={`shrink-0 whitespace-nowrap rounded-full border-2 px-3 py-1.5 text-xs font-medium transition-all ${
                   selectedVibe === v
                     ? "border-black bg-black text-white scale-105"
                     : "border-black/10 bg-white text-black/60 hover:border-black/25"
@@ -490,24 +476,6 @@ export function ContextMachine() {
         </div>
       </div>
 
-      {/* Gallery */}
-      {gallery.length > 0 && (
-        <section className="mt-20">
-          <h2 className="mb-8 text-center font-display text-2xl font-semibold tracking-tight">{cm.gallery.title}</h2>
-          <div className="columns-2 gap-4 sm:columns-3 lg:columns-4">
-            {gallery.map((item) => (
-              <div key={item.id} className="mb-4 break-inside-avoid overflow-hidden rounded-xl border border-black/8 bg-white shadow-sm">
-                <img src={`${serverUrl}/v1/gallery/${item.id}/image`} alt={item.username} className="w-full" loading="lazy" />
-                <div className="px-3 py-2">
-                  <p className="text-xs font-medium">{item.username}</p>
-                  <p className="text-[10px] text-black/40">{item.sensors.map((s: string) => sensorName(s)).join(" · ")}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
       {/* Effect CSS */}
       <style jsx global>{`
         .effect-layer { position: absolute; inset: 0; pointer-events: none; }
@@ -598,4 +566,81 @@ interface GalleryItem {
   sensors: string[];
   easterEggs: string[];
   createdAt: string;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Gallery Marquee — horizontal scroll with vertical wave            */
+/* ------------------------------------------------------------------ */
+
+export function GalleryMarquee() {
+  const { t } = useI18n();
+  const [gallery, setGallery] = useState<GalleryItem[]>([]);
+  const serverUrl = getAgentServerUrl();
+
+  useEffect(() => {
+    fetch(`${serverUrl}/v1/gallery?limit=50`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((d) => d && setGallery(d.items || []))
+      .catch(() => {});
+  }, [serverUrl]);
+
+  if (gallery.length === 0) return null;
+
+  // Double for seamless loop
+  const items = [...gallery, ...gallery];
+
+  function sensorName(id: string) {
+    return t.modules.items.find((m: { id: string }) => m.id === id)?.name ?? id;
+  }
+
+  return (
+    <section className="relative overflow-hidden pb-16">
+      <h2 className="mb-8 text-center font-display text-2xl font-semibold tracking-tight">
+        {t.contextMachine.gallery.title}
+      </h2>
+      <div className="gallery-marquee flex gap-5">
+        {items.map((item, i) => (
+          <div
+            key={`${item.id}-${i}`}
+            className="gallery-card flex-none overflow-hidden rounded-xl border border-black/8 bg-white shadow-sm"
+            style={{ width: 280, animationDelay: `${(i % gallery.length) * -0.4}s` }}
+          >
+            <img
+              src={`${serverUrl}/v1/gallery/${item.id}/image`}
+              alt={item.username}
+              className="w-full"
+              loading="lazy"
+            />
+            <div className="px-3 py-2">
+              <p className="text-xs font-medium">{item.username}</p>
+              <p className="text-[10px] text-black/40">
+                {item.sensors.map((s: string) => sensorName(s)).join(" · ")}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <style jsx>{`
+        .gallery-marquee {
+          animation: gallery-scroll 40s linear infinite;
+          width: max-content;
+        }
+        .gallery-marquee:hover {
+          animation-play-state: paused;
+        }
+        @keyframes gallery-scroll {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .gallery-card {
+          animation: card-wave 3s ease-in-out infinite;
+        }
+        @keyframes card-wave {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-6px); }
+        }
+      `}</style>
+    </section>
+  );
 }

@@ -9,6 +9,16 @@ import { MagneticButton } from "./MagneticButton";
 import { IsometricRoom } from "./IsometricRoom";
 import { SpotlightCard } from "./SpotlightCard";
 
+const ContextMachineInline = dynamic(
+  () => import("../context-machine/ContextMachine").then((m) => m.ContextMachine),
+  { ssr: false },
+);
+
+const GalleryMarquee = dynamic(
+  () => import("../context-machine/ContextMachine").then((m) => m.GalleryMarquee),
+  { ssr: false },
+);
+
 const FloatingBlocks = dynamic(
   () => import("./FloatingBlocks").then((m) => m.FloatingBlocks),
   { ssr: false },
@@ -139,32 +149,9 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Context Machine CTA */}
-      <section className="relative py-24 px-6">
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7 }}
-          className="mx-auto max-w-2xl text-center"
-        >
-          <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-black/40">
-            {t.contextMachine.cta.eyebrow}
-          </span>
-          <h2 className="mt-4 font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-            {t.contextMachine.cta.title}
-          </h2>
-          <p className="mt-4 text-base text-black/50 leading-relaxed">
-            {t.contextMachine.cta.desc}
-          </p>
-          <div className="mt-8">
-            <Link href="/context-machine">
-              <MagneticButton className="!px-8 !py-3.5 text-sm">
-                {t.contextMachine.cta.button}
-              </MagneticButton>
-            </Link>
-          </div>
-        </motion.div>
+      {/* Context Machine — inline interactive section */}
+      <section id="context-machine" className="relative py-16">
+        <ContextMachineInline />
       </section>
 
       {/* Smart Space — 3D Room center, modules + scenes orbiting */}
@@ -355,6 +342,9 @@ export function Landing() {
 
         <TeamMarquee />
       </section>
+
+      {/* Gallery marquee — community cards */}
+      <GalleryMarquee />
     </>
   );
 }
