@@ -532,6 +532,10 @@ export function AgentPanel() {
           </ul>
         </SpotlightCard>
 
+      </div>
+
+      {/* Memory – full width below the grid */}
+      <div className="lg:col-span-5">
         <MemoryPreview />
       </div>
     </div>
