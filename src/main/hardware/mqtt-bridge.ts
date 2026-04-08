@@ -350,133 +350,45 @@ export class AihubMqttBridge {
   ): Promise<PublishResult | null> {
     const normalizedAction = action.trim().toLowerCase()
 
-    if (normalizedAction === 'set_color') {
-      const brightness =
-        typeof params.brightness === 'number' && Number.isFinite(params.brightness)
-          ? params.brightness
-          : 100
-
-      const r = clamp(Number(params.r ?? 255), 0, 255)
-      const g = clamp(Number(params.g ?? 255), 0, 255)
-      const b = clamp(Number(params.b ?? 255), 0, 255)
-
-      const color = `#${[r, g, b]
-        .map((value) => value.toString(16).padStart(2, '0'))
-        .join('')}`
-      const wsBrightness = Math.round(clamp(brightness, 0, 100) * 2.55)
-      const hue = rgbToHue(r, g, b)
-
-      const compatibilityTopics = this.publishLegacyCommands
-        ? [
-            await this.publishLegacy(
-              blockId,
-              'ws2812',
-              JSON.stringify({
-                effect: 'siri',
-                brightness: wsBrightness,
-                hue,
-              }),
-            ).then((r) => r.topic),
-          ]
-        : undefined
-
-      const payload = buildCommandEnvelope(blockId, 'set_led', {
-        brightness,
-        color,
-        mode: 'static',
-        segment: null,
-      })
-
-      const result = await this.publishEnvelope(blockId, 'set_led', payload)
-      return { ...result, compatibilityTopics }
-    }
+    // 固件只认 aihub/cmd/{nodeId}/ws2812 和 aihub/cmd/{nodeId}/led
+    // 不解析 envelope，直接发原始 JSON payload
 
     if (normalizedAction === 'on') {
-      const brt = typeof params.brightness === 'number' ? Math.round(clamp(params.brightness, 0, 100) * 2.55) : 180
-      const compatibilityTopics = this.publishLegacyCommands
-        ? [
-            await this.publishLegacy(
-              blockId,
-              'ws2812',
-              JSON.stringify({ effect: 'rainbow', brightness: brt }),
-            ).then((r) => r.topic),
-          ]
-        : undefined
-
-      const payload = buildCommandEnvelope(blockId, 'set_led', {
-        brightness: 100,
-        color: '#ffffff',
-        mode: 'static',
-        segment: null,
-      })
-
-      const result = await this.publishEnvelope(blockId, 'set_led', payload)
-      return { ...result, compatibilityTopics }
+      const brt = typeof params.brightness === 'number'
+        ? Math.round(clamp(params.brightness, 0, 100) * 2.55)
+        : 180
+      return this.publishLegacy(blockId, 'ws2812', JSON.stringify({ effect: 'rainbow', brightness: brt }))
     }
 
     if (normalizedAction === 'off') {
-      const compatibilityTopics = this.publishLegacyCommands
-        ? [
-            await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'off' })).then(
-              (r) => r.topic,
-            ),
-            await this.publishLegacy(blockId, 'ws2812', JSON.stringify({ effect: 'off' })).then(
-              (r) => r.topic,
-            ),
-          ]
-        : undefined
+      await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'off' }))
+      return this.publishLegacy(blockId, 'ws2812', JSON.stringify({ effect: 'off' }))
+    }
 
-      const payload = buildCommandEnvelope(blockId, 'set_led', {
-        mode: 'off',
-      })
-
-      const result = await this.publishEnvelope(blockId, 'set_led', payload)
-      return { ...result, compatibilityTopics }
+    if (normalizedAction === 'set_color') {
+      const brightness = typeof params.brightness === 'number' && Number.isFinite(params.brightness)
+        ? params.brightness : 100
+      const r = clamp(Number(params.r ?? 255), 0, 255)
+      const g = clamp(Number(params.g ?? 255), 0, 255)
+      const b = clamp(Number(params.b ?? 255), 0, 255)
+      const wsBrightness = Math.round(clamp(brightness, 0, 100) * 2.55)
+      const hue = rgbToHue(r, g, b)
+      return this.publishLegacy(blockId, 'ws2812', JSON.stringify({ effect: 'siri', brightness: wsBrightness, hue }))
     }
 
     if (normalizedAction === 'set_pattern') {
       const pattern = String(params.pattern ?? 'rainbow')
-      const payload = buildCommandEnvelope(blockId, 'set_led', {
-        brightness:
-          typeof params.brightness === 'number' && Number.isFinite(params.brightness)
-            ? params.brightness
-            : undefined,
-        mode: this.mapPatternToLedMode(pattern),
-        period_ms:
-          typeof params.speed_ms === 'number' && Number.isFinite(params.speed_ms)
-            ? params.speed_ms
-            : undefined,
-      })
-
-      const compatibilityTopics = this.publishLegacyCommands
-        ? [
-            await this.publishLegacy(
-              blockId,
-              'ws2812',
-              JSON.stringify({
-                effect: pattern,
-                brightness:
-                  typeof params.brightness === 'number' && Number.isFinite(params.brightness)
-                    ? params.brightness
-                    : undefined,
-                hue:
-                  typeof params.hue === 'number' && Number.isFinite(params.hue)
-                    ? params.hue
-                    : undefined,
-                speed_ms:
-                  typeof params.speed_ms === 'number' && Number.isFinite(params.speed_ms)
-                    ? params.speed_ms
-                    : undefined,
-              }),
-            ).then((result) => result.topic),
-          ]
-        : undefined
-
-      const result = await this.publishEnvelope(blockId, 'set_led', payload)
-      return {
-        ...result,
-        compatibilityTopics,
+      const payload: Record<string, unknown> = { effect: pattern }
+      if (typeof params.brightness === 'number' && Number.isFinite(params.brightness)) {
+        payload.brightness = Math.round(clamp(params.brightness, 0, 100) * 2.55)
       }
+      if (typeof params.hue === 'number' && Number.isFinite(params.hue)) {
+        payload.hue = params.hue
+      }
+      if (typeof params.speed_ms === 'number' && Number.isFinite(params.speed_ms)) {
+        payload.speed_ms = params.speed_ms
+      }
+      return this.publishLegacy(blockId, 'ws2812', JSON.stringify(payload))
     }
 
     return null
@@ -653,26 +565,4 @@ export class AihubMqttBridge {
     return messages
   }
 
-  private mapPatternToLedMode(pattern: string): string {
-    switch (pattern.trim().toLowerCase()) {
-      case 'breathing':
-      case 'breathe':
-        return 'breathe'
-      case 'steady':
-      case 'solid':
-      case 'static':
-        return 'static'
-      case 'strobe':
-      case 'blink':
-        return 'blink'
-      case 'heartbeat':
-        return 'heartbeat'
-      case 'off':
-        return 'off'
-      case 'alert':
-        return 'alert'
-      default:
-        return 'rainbow'
-    }
-  }
 }
