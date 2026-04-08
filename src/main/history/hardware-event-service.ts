@@ -48,6 +48,18 @@ function toIsoTime(minutesAgo: number): string {
   return new Date(Date.now() - minutesAgo * 60_000).toISOString()
 }
 
+function isDuplicateMsgIdConflict(status: number, message: string): boolean {
+  if (status !== 409) return false
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('duplicate key') ||
+    normalized.includes('already exists') ||
+    normalized.includes('23505') ||
+    normalized.includes('hardware_events_msg_id_uidx') ||
+    normalized.includes('msg_id')
+  )
+}
+
 export class HardwareEventService {
   private readonly enabled: boolean
   private readonly fetchImpl: typeof fetch
@@ -235,6 +247,13 @@ export class HardwareEventService {
 
     if (!response.ok) {
       const message = await response.text()
+      if (isDuplicateMsgIdConflict(response.status, message)) {
+        console.warn(
+          '[hardware-events] duplicate msg_id ignored:',
+          rows.map((row) => row.msg_id).join(','),
+        )
+        return
+      }
       throw new Error(`Supabase insert failed (${response.status}): ${message}`)
     }
   }

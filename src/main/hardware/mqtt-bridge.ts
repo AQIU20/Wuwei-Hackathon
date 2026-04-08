@@ -437,12 +437,16 @@ export class AihubMqttBridge {
 
     if (this.options.eventService?.isEnabled()) {
       const packetMeta = getPacketMeta(packet)
-      void this.options.eventService.insertMqttEnvelope(topic, envelope, {
-        meta: {
-          ...packetMeta,
-        },
-        rootTopic: this.rootTopic,
-      })
+      void this.options.eventService
+        .insertMqttEnvelope(topic, envelope, {
+          meta: {
+            ...packetMeta,
+          },
+          rootTopic: this.rootTopic,
+        })
+        .catch((error) => {
+          console.error('[hardware-events] insert mqtt envelope failed:', error)
+        })
     }
 
     const messages = this.toIngressMessages(
