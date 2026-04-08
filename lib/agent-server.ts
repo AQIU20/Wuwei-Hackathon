@@ -10,3 +10,9 @@ export function getAgentServerUrl() {
   );
 }
 
+export function getHardwareWebSocketUrl() {
+  const url = new URL("/v1/hardware/ws", getAgentServerUrl());
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString();
+}
+

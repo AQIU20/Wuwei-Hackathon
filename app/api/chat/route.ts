@@ -7,8 +7,17 @@ import {
   type UIMessage,
 } from "ai";
 import { z } from "zod";
+import {
+  mockListOnlineBlocks,
+  mockReadSensors,
+  mockSetLight,
+  mockSpeak,
+  mockTriggerHaptic,
+} from "./tool-mocks";
+import { createToolExecutor } from "./tool-transport";
 
 export const maxDuration = 60;
+export const runtime = "nodejs";
 
 const SYSTEM_PROMPT_EN = `You are the Unforce Make Agent — the brain of a modular IoT blocks platform built by team "unforce make" for a hackathon.
 
@@ -40,42 +49,12 @@ export async function POST(req: Request) {
           "Read current values from environment / heart-rate / formaldehyde / posture sensors on the blocks mesh.",
         inputSchema: z.object({
           blocks: z
-            .array(
-              z.enum(["env-001", "hr-002", "hcho-01", "imu-01"]),
-            )
+            .array(z.enum(["env-001", "hr-002", "hcho-01", "imu-01"]))
             .describe("Which sensor block IDs to read"),
         }),
-        execute: async ({ blocks }) => {
-          const readings: Record<string, unknown> = {};
-          for (const id of blocks) {
-            switch (id) {
-              case "env-001":
-                readings[id] = {
-                  temperature_c: 29.4,
-                  humidity_pct: 72,
-                  timestamp: Date.now(),
-                };
-                break;
-              case "hr-002":
-                readings[id] = { bpm: 86, hrv_ms: 42, timestamp: Date.now() };
-                break;
-              case "hcho-01":
-                readings[id] = {
-                  hcho_mg_m3: 0.09,
-                  timestamp: Date.now(),
-                };
-                break;
-              case "imu-01":
-                readings[id] = {
-                  posture: "slightly slouched",
-                  tilt_deg: 14,
-                  timestamp: Date.now(),
-                };
-                break;
-            }
-          }
-          return readings;
-        },
+        execute: createToolExecutor("readSensors", ({ blocks }) =>
+          mockReadSensors({ blocks }),
+        ),
       }),
       setLight: tool({
         description:
@@ -87,11 +66,7 @@ export async function POST(req: Request) {
           b: z.number().int().min(0).max(255).optional(),
           duration_ms: z.number().int().positive().optional(),
         }),
-        execute: async (input) => ({
-          block: "light-03",
-          sent: { topic: "blocks/light-03/command", payload: input },
-          ok: true,
-        }),
+        execute: createToolExecutor("setLight", (input) => mockSetLight(input)),
       }),
       triggerHaptic: tool({
         description:
@@ -100,11 +75,9 @@ export async function POST(req: Request) {
           pattern: z.enum(["gentle", "alert", "heartbeat", "double-tap"]),
           duration_ms: z.number().int().positive().default(800),
         }),
-        execute: async (input) => ({
-          block: "vibe-02",
-          sent: { topic: "blocks/vibe-02/command", payload: input },
-          ok: true,
-        }),
+        execute: createToolExecutor("triggerHaptic", (input) =>
+          mockTriggerHaptic(input),
+        ),
       }),
       speak: tool({
         description:
@@ -113,28 +86,15 @@ export async function POST(req: Request) {
           text: z.string().min(1).max(160),
           voice: z.enum(["calm", "neutral", "warm"]).default("warm"),
         }),
-        execute: async (input) => ({
-          block: "voice-01",
-          sent: { topic: "blocks/voice-01/command", payload: input },
-          ok: true,
-        }),
+        execute: createToolExecutor("speak", (input) => mockSpeak(input)),
       }),
       listOnlineBlocks: tool({
         description:
           "List every block currently registered with the Host, with its capability and link quality.",
         inputSchema: z.object({}),
-        execute: async () => ({
-          blocks: [
-            { id: "env-001", capability: "environment", rssi: -52 },
-            { id: "hr-002", capability: "heart-rate", rssi: -60 },
-            { id: "hcho-01", capability: "formaldehyde", rssi: -58 },
-            { id: "vision-01", capability: "camera", rssi: -47 },
-            { id: "voice-01", capability: "voice", rssi: -49 },
-            { id: "light-03", capability: "led-strip", rssi: -55 },
-            { id: "vibe-02", capability: "haptics", rssi: -61 },
-            { id: "imu-01", capability: "posture", rssi: -57 },
-          ],
-        }),
+        execute: createToolExecutor("listOnlineBlocks", () =>
+          mockListOnlineBlocks(),
+        ),
       }),
     },
   });

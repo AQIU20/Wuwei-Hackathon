@@ -1,12 +1,12 @@
 import { I18nProvider } from "@/lib/i18n";
-import { DocsPage } from "../../components/DocsPage";
 import { Shell } from "../../components/Shell";
+import { DocsComingSoon } from "./DocsComingSoon";
 
-export default function Docs() {
+export default function Page() {
   return (
     <I18nProvider>
       <Shell>
-        <DocsPage />
+        <DocsComingSoon />
       </Shell>
     </I18nProvider>
   );

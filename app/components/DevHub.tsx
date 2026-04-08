@@ -43,10 +43,10 @@ export function DevHub() {
         transition={{ duration: 0.7 }}
         className="mb-16"
       >
-        <h1 className="font-display text-[clamp(2.5rem,5vw,4rem)] font-medium tracking-[-0.04em] text-white">
+        <h1 className="font-display text-[clamp(2.5rem,5vw,4rem)] font-medium tracking-[-0.04em] text-gray-900">
           {t.dev.heroTitle}
         </h1>
-        <p className="mt-4 max-w-2xl text-lg text-white/50">
+        <p className="mt-4 max-w-2xl text-lg text-black/50">
           {t.dev.heroDesc}
         </p>
       </motion.div>
@@ -60,7 +60,7 @@ export function DevHub() {
       {/* Services + Topics */}
       <div className="mt-8 grid gap-6 lg:grid-cols-5">
         <SpotlightCard className="lg:col-span-3">
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/40">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-black/40">
             {t.dev.topicsTitle}
           </p>
           <div className="mt-5 space-y-2">
@@ -71,19 +71,19 @@ export function DevHub() {
                 whileInView={{ opacity: 1, x: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.05, duration: 0.4 }}
-                className="flex items-center justify-between rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3"
+                className="flex items-center justify-between rounded-xl border border-black/5 bg-black/[0.02] px-4 py-3"
               >
                 <span className="font-mono text-sm text-[color:var(--accent-2)]">
                   {topic.t}
                 </span>
-                <span className="text-xs text-white/50">{topic.d}</span>
+                <span className="text-xs text-black/50">{topic.d}</span>
               </motion.div>
             ))}
           </div>
         </SpotlightCard>
 
         <SpotlightCard className="lg:col-span-2">
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/40">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-black/40">
             {t.dev.portsTitle}
           </p>
           <div className="mt-5 space-y-3">
@@ -94,17 +94,17 @@ export function DevHub() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true }}
                 transition={{ delay: i * 0.06 }}
-                className="rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3"
+                className="rounded-xl border border-black/5 bg-black/[0.02] px-4 py-3"
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-display text-sm text-white">
+                  <span className="font-display text-sm text-gray-900">
                     {s.name}
                   </span>
                   <span className="font-mono text-xs text-[color:var(--accent-1)]">
                     {s.port}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-white/40">{s.tag}</p>
+                <p className="mt-1 text-xs text-black/40">{s.tag}</p>
               </motion.div>
             ))}
           </div>
@@ -114,22 +114,22 @@ export function DevHub() {
       {/* Downloads */}
       <div className="mt-8">
         <SpotlightCard>
-          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/40">
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-black/40">
             {t.dev.downloads}
           </p>
           <div className="mt-5 grid gap-4 sm:grid-cols-3">
             {t.dev.downloadItems.map((item) => (
               <div
                 key={item.name}
-                className="rounded-xl border border-white/5 bg-white/[0.02] px-5 py-4"
+                className="rounded-xl border border-black/5 bg-black/[0.02] px-5 py-4"
               >
                 <div className="flex items-center gap-3">
                   <DownloadIcon />
                   <div>
-                    <div className="text-sm font-medium text-white">
+                    <div className="text-sm font-medium text-gray-900">
                       {item.name}
                     </div>
-                    <div className="text-xs text-white/40">{item.desc}</div>
+                    <div className="text-xs text-black/40">{item.desc}</div>
                   </div>
                 </div>
               </div>
@@ -159,18 +159,18 @@ function CodeCard({
 }) {
   return (
     <SpotlightCard className="p-0">
-      <div className="flex items-center justify-between border-b border-white/10 px-5 py-3">
+      <div className="flex items-center justify-between border-b border-black/10 px-5 py-3">
         <div className="flex items-center gap-2">
           <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
           <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
-          <span className="ml-3 font-mono text-[11px] uppercase tracking-[0.18em] text-white/40">
+          <span className="ml-3 font-mono text-[11px] uppercase tracking-[0.18em] text-black/40">
             {title}
           </span>
         </div>
-        <span className="font-mono text-[10px] text-white/30">{language}</span>
+        <span className="font-mono text-[10px] text-black/30">{language}</span>
       </div>
-      <pre className="overflow-x-auto px-5 py-5 font-mono text-[12.5px] leading-[1.7] text-white/80">
+      <pre className="overflow-x-auto px-5 py-5 font-mono text-[12.5px] leading-[1.7] text-black/80">
         <code>{code}</code>
       </pre>
     </SpotlightCard>
@@ -184,7 +184,7 @@ function DownloadIcon() {
       height="16"
       viewBox="0 0 24 24"
       fill="none"
-      className="text-white/40"
+      className="text-black/40"
     >
       <path
         d="M12 3v12m0 0-4-4m4 4 4-4M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"
