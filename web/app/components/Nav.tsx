@@ -36,7 +36,7 @@ export function Nav() {
             priority
           />
           <span className="font-display text-lg font-medium tracking-tight">
-            无为创造 <span className="text-black/50">Unforce Make</span>
+            {t.brand}
           </span>
         </Link>
       </motion.div>

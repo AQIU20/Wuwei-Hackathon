@@ -13,6 +13,7 @@ export type Locale = "en" | "zh";
 
 export const dict = {
   en: {
+    brand: "Unforce Make",
     nav: {
       home: "Home",
       agent: "Agent",
@@ -182,6 +183,7 @@ export const dict = {
     },
   },
   zh: {
+    brand: "无为创造",
     nav: {
       home: "首页",
       agent: "Agent",
