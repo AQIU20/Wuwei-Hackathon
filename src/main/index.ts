@@ -25,7 +25,7 @@ const hardwareMode = resolveHardwareMode()
 const mockHardwareMode = isMockHardwareMode(hardwareMode)
 const mqttHardwareMode = isMqttHardwareMode(hardwareMode)
 const hardware = new HardwareStore()
-const history = mockHardwareMode ? new SupabaseHistoryService() : null
+const history = new SupabaseHistoryService()
 const galleryDb = new Database(join(paths.memoryDir, 'gallery.sqlite'))
 galleryDb.run('CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
 galleryDb.run('CREATE TABLE IF NOT EXISTS gallery (id INTEGER PRIMARY KEY, username TEXT, sensors TEXT, easter_eggs TEXT, image TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
