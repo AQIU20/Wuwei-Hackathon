@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
+import { Database } from 'bun:sqlite'
 import { Hono } from 'hono'
 import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
@@ -22,6 +23,9 @@ const hardwareMode = resolveHardwareMode()
 const mockHardwareMode = isMockHardwareMode(hardwareMode)
 const hardware = new HardwareStore()
 const history = mockHardwareMode ? new SupabaseHistoryService() : null
+const galleryDb = new Database(join(paths.memoryDir, 'gallery.sqlite'))
+galleryDb.run('CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
+galleryDb.run('CREATE TABLE IF NOT EXISTS gallery (id INTEGER PRIMARY KEY, username TEXT, sensors TEXT, easter_eggs TEXT, image TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
 const stopSimulation = mockHardwareMode ? hardware.startSimulation() : null
 const sessions = new Map<string, AgentRuntime>()
 type WebSocketConnection = { send: (data: string) => void }
@@ -354,6 +358,70 @@ app.post('/v1/chat/sessions/:sessionId/messages', async (c) => {
   }
 })
 
+// --- Waitlist & Gallery routes ---
+
+app.post('/v1/waitlist', async (c) => {
+  const body = (await c.req.json()) as { email?: string }
+  const email = body.email?.trim()
+  if (!email) {
+    return c.json({ error: 'email is required' }, 400)
+  }
+  try {
+    galleryDb.run('INSERT INTO waitlist (email) VALUES (?)', [email])
+    return c.json({ ok: true })
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : ''
+    if (msg.includes('UNIQUE constraint failed')) {
+      return c.json({ error: 'Email already registered' }, 409)
+    }
+    return c.json({ error: msg || 'Internal error' }, 500)
+  }
+})
+
+app.post('/v1/gallery', async (c) => {
+  const body = (await c.req.json()) as {
+    username?: string
+    sensors?: string[]
+    easterEggs?: string[]
+    imageBase64?: string
+  }
+  const { username, sensors, easterEggs, imageBase64 } = body
+  if (!username) {
+    return c.json({ error: 'username is required' }, 400)
+  }
+  const result = galleryDb.run(
+    'INSERT INTO gallery (username, sensors, easter_eggs, image) VALUES (?, ?, ?, ?)',
+    [username, JSON.stringify(sensors ?? []), JSON.stringify(easterEggs ?? []), imageBase64 ?? ''],
+  )
+  return c.json({ ok: true, id: Number(result.lastInsertRowid) })
+})
+
+app.get('/v1/gallery', (c) => {
+  const limit = Math.min(Math.max(Number(c.req.query('limit') || 20), 1), 100)
+  const offset = Math.max(Number(c.req.query('offset') || 0), 0)
+
+  const total = (galleryDb.query('SELECT COUNT(*) as count FROM gallery').get() as { count: number }).count
+  const rows = galleryDb.query('SELECT * FROM gallery ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset) as {
+    id: number
+    username: string
+    sensors: string
+    easter_eggs: string
+    image: string
+    created_at: string
+  }[]
+
+  const items = rows.map((row) => ({
+    id: row.id,
+    username: row.username,
+    sensors: JSON.parse(row.sensors) as string[],
+    easterEggs: JSON.parse(row.easter_eggs) as string[],
+    image: row.image,
+    createdAt: row.created_at,
+  }))
+
+  return c.json({ items, total })
+})
+
 const port = Number(process.env.PORT || 8787)
 const server = BunRuntime.Bun.serve({
   fetch: app.fetch,
@@ -373,6 +441,7 @@ function shutdown(): void {
     runtime.destroy()
   }
   memoryService.destroy()
+  galleryDb.close()
   server.stop(true)
 }
 

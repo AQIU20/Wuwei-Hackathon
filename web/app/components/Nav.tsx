@@ -17,6 +17,7 @@ export function Nav() {
     { href: "/agent", label: t.nav.agent },
     { href: "/dev", label: t.nav.dev },
     { href: "/dev/docs", label: t.nav.docs },
+    { href: "/context-machine", label: t.nav.contextMachine },
   ];
 
   return (
