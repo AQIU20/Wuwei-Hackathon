@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toPng } from "html-to-image";
 import { useI18n, type Locale } from "@/lib/i18n";
@@ -230,22 +230,26 @@ export function ContextMachine() {
   }
 
   /* -- Generate -- */
-  const generateCard = useCallback(async () => {
+  async function generateCard() {
     if (!cardRef.current || active.length === 0) return;
     setCardSeed(Math.random()); // randomize style
     setGenerating(true);
     // Wait for React to flush the re-render (seed + latest username)
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 80))));
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100))));
     try {
       const png = await toPng(cardRef.current, { pixelRatio: 2, backgroundColor: "#000" });
       setCardImage(png);
-    } catch { /* */ }
+    } catch (err) {
+      console.error("Card gen failed:", err);
+    }
     setGenerating(false);
-  }, [active, username, selectedVibe]);
+  }
 
   /* -- Gallery post (also adds email to waitlist) -- */
+  const [posting, setPosting] = useState(false);
   async function postToGallery() {
-    if (!cardImage) return;
+    if (!cardImage || posting) return;
+    setPosting(true);
     try {
       const res = await fetch(`${serverUrl}/v1/gallery`, {
         method: "POST",
@@ -257,7 +261,11 @@ export function ContextMachine() {
         setPosted(true);
         window.dispatchEvent(new CustomEvent("gallery-new-item", { detail: { id: data.id, username: username || "Anonymous", sensors: active, easterEggs: unlockedTexts, createdAt: new Date().toISOString() } }));
       }
-    } catch { /* */ }
+    } catch (err) {
+      console.error("Gallery post failed:", err);
+    } finally {
+      setPosting(false);
+    }
   }
 
   /* -- Helpers -- */
@@ -448,8 +456,8 @@ export function ContextMachine() {
                     ↓ Download
                   </a>
                   {!posted ? (
-                    <button onClick={postToGallery} className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-black/80 transition-colors">
-                      {cm.gallery.post}
+                    <button onClick={postToGallery} disabled={posting} className="inline-flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-black/80 transition-colors disabled:opacity-50">
+                      {posting ? "..." : cm.gallery.post}
                     </button>
                   ) : (
                     <span className="inline-flex items-center gap-1 text-sm font-medium text-emerald-600">✓ {cm.gallery.posted}</span>
