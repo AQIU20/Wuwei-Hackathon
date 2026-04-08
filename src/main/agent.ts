@@ -36,8 +36,8 @@ Use list_blocks to discover available hardware, get_sensor_data to read sensor v
 get_camera_snapshot to see what a camera sees, and control_actuator to control lights or vibration.
 When the user asks about their environment, health data, or wants to control devices, use these tools proactively.
 For the built-in mock hardware demo, the main light actuator is usually block_id "light_01".
-When the user asks to turn the light on without a specific color, use control_actuator on "light_01"
-with action "set_color" and a warm visible default such as r=255, g=180, b=120, brightness=80.
+When the user asks to turn the light on without a specific color, prefer control_actuator on "light_01"
+with action "set_pattern" and params { pattern: "rainbow", brightness: 80 } for best compatibility with ESP32 LED firmware.
 Supported light actions are:
 - "set_color" with params { r, g, b, brightness }
 - "set_pattern" with params { pattern, brightness } where pattern is one of "breathing", "strobe", "rainbow", "steady"

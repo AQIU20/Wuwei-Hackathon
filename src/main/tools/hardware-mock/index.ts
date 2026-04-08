@@ -241,6 +241,7 @@ function createControlActuatorTool(
       'Use list_blocks to confirm the actuator block_id before calling this tool',
       'For light set_color, params must include r, g, b (0-255) and brightness (0-100)',
       'For set_pattern, valid patterns are: "breathing", "strobe", "rainbow", "steady"',
+      'For real ESP32 LED nodes (block_id starts with "led_"), prefer set_pattern (for example "rainbow") over set_color',
       'For vibration pulse, params must include intensity (0-100) and duration_ms',
       'For vibration pattern, valid patterns are: "heartbeat", "alert", "gentle"',
       'Always confirm with the user before sending repeated or high-intensity commands',

@@ -75,6 +75,28 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max)
 }
 
+function rgbToHue(r: number, g: number, b: number): number {
+  const rn = clamp(r, 0, 255) / 255
+  const gn = clamp(g, 0, 255) / 255
+  const bn = clamp(b, 0, 255) / 255
+  const max = Math.max(rn, gn, bn)
+  const min = Math.min(rn, gn, bn)
+  const delta = max - min
+
+  if (delta === 0) return 0
+
+  let hue = 0
+  if (max === rn) {
+    hue = ((gn - bn) / delta) % 6
+  } else if (max === gn) {
+    hue = (bn - rn) / delta + 2
+  } else {
+    hue = (rn - gn) / delta + 4
+  }
+
+  return Math.round((hue * 60 + 360) % 360)
+}
+
 function batteryMvToPercent(value: unknown): number | undefined {
   if (typeof value !== 'number' || !Number.isFinite(value)) return undefined
   return Math.round(clamp(((value - 3300) / 900) * 100, 0, 100))
@@ -341,12 +363,23 @@ export class AihubMqttBridge {
       const color = `#${[r, g, b]
         .map((value) => value.toString(16).padStart(2, '0'))
         .join('')}`
+      const wsBrightness = Math.round(clamp(brightness, 0, 100) * 2.55)
+      const hue = rgbToHue(r, g, b)
 
       const compatibilityTopics = this.publishLegacyCommands
         ? [
             await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'on' })).then(
               (r) => r.topic,
             ),
+            await this.publishLegacy(
+              blockId,
+              'ws2812',
+              JSON.stringify({
+                effect: 'status',
+                brightness: wsBrightness,
+                hue,
+              }),
+            ).then((r) => r.topic),
           ]
         : undefined
 
@@ -367,6 +400,15 @@ export class AihubMqttBridge {
             await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'on' })).then(
               (r) => r.topic,
             ),
+            await this.publishLegacy(
+              blockId,
+              'ws2812',
+              JSON.stringify({
+                effect: 'status',
+                brightness: 180,
+                hue: 0,
+              }),
+            ).then((r) => r.topic),
           ]
         : undefined
 
@@ -385,6 +427,9 @@ export class AihubMqttBridge {
       const compatibilityTopics = this.publishLegacyCommands
         ? [
             await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'off' })).then(
+              (r) => r.topic,
+            ),
+            await this.publishLegacy(blockId, 'ws2812', JSON.stringify({ effect: 'off' })).then(
               (r) => r.topic,
             ),
           ]
