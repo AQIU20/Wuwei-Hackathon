@@ -171,7 +171,7 @@ export const dict = {
     },
     contextMachine: {
       title: "The Context Machine",
-      subtitle: "Drag sensors onto the stage. Watch reality layer up.",
+      subtitle: "Leave your mark.",
       username: "Your name",
       usernamePlaceholder: "Enter a name for your card",
       sensorPalette: "Sensor Palette",
@@ -378,7 +378,7 @@ export const dict = {
     },
     contextMachine: {
       title: "语境制造机",
-      subtitle: "拖动传感器到舞台上，看现实一层层叠加。",
+      subtitle: "留下你的足迹",
       username: "你的名字",
       usernamePlaceholder: "输入卡牌上的名字",
       sensorPalette: "传感器库",

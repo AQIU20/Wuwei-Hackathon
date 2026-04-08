@@ -257,9 +257,9 @@ export function ContextMachine() {
         body: JSON.stringify({ username: username || "Anonymous", email: email || undefined, sensors: active, easterEggs: unlockedTexts, imageBase64: cardImage }),
       });
       if (res.ok) {
-        const data = await res.json();
         setPosted(true);
-        window.dispatchEvent(new CustomEvent("gallery-new-item", { detail: { id: data.id, username: username || "Anonymous", sensors: active, easterEggs: unlockedTexts, createdAt: new Date().toISOString() } }));
+        // Signal gallery to refetch
+        window.dispatchEvent(new Event("gallery-refresh"));
       }
     } catch (err) {
       console.error("Gallery post failed:", err);
@@ -571,22 +571,24 @@ export function GalleryMarquee() {
   const [gallery, setGallery] = useState<GalleryItem[]>([]);
   const serverUrl = getAgentServerUrl();
 
-  useEffect(() => {
+  const fetchGallery = () => {
     fetch(`${serverUrl}/v1/gallery?limit=50`)
       .then((r) => r.ok ? r.json() : null)
       .then((d) => d && setGallery(d.items || []))
       .catch(() => {});
-  }, [serverUrl]);
+  };
 
-  // Listen for new gallery posts and prepend them instantly
+  useEffect(() => { fetchGallery(); }, [serverUrl]);
+
+  // Refetch when a new card is posted
   useEffect(() => {
-    function onNewItem(e: Event) {
-      const item = (e as CustomEvent).detail as GalleryItem;
-      setGallery((prev) => [item, ...prev]);
+    function onRefresh() {
+      // Small delay so the server has time to commit
+      setTimeout(fetchGallery, 500);
     }
-    window.addEventListener("gallery-new-item", onNewItem);
-    return () => window.removeEventListener("gallery-new-item", onNewItem);
-  }, []);
+    window.addEventListener("gallery-refresh", onRefresh);
+    return () => window.removeEventListener("gallery-refresh", onRefresh);
+  }, [serverUrl]);
 
   if (gallery.length === 0) return null;
 
