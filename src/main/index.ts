@@ -401,12 +401,11 @@ app.get('/v1/gallery', (c) => {
   const offset = Math.max(Number(c.req.query('offset') || 0), 0)
 
   const total = (galleryDb.query('SELECT COUNT(*) as count FROM gallery').get() as { count: number }).count
-  const rows = galleryDb.query('SELECT * FROM gallery ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset) as {
+  const rows = galleryDb.query('SELECT id, username, sensors, easter_eggs, created_at FROM gallery ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset) as {
     id: number
     username: string
     sensors: string
     easter_eggs: string
-    image: string
     created_at: string
   }[]
 
@@ -415,11 +414,25 @@ app.get('/v1/gallery', (c) => {
     username: row.username,
     sensors: JSON.parse(row.sensors) as string[],
     easterEggs: JSON.parse(row.easter_eggs) as string[],
-    image: row.image,
     createdAt: row.created_at,
   }))
 
   return c.json({ items, total })
+})
+
+app.get('/v1/gallery/:id/image', (c) => {
+  const id = Number(c.req.param('id'))
+  const row = galleryDb.query('SELECT image FROM gallery WHERE id = ?').get(id) as { image: string } | null
+  if (!row) return c.json({ error: 'Not found' }, 404)
+
+  const base64 = row.image.replace(/^data:image\/\w+;base64,/, '')
+  const buffer = Buffer.from(base64, 'base64')
+  return new Response(buffer, {
+    headers: {
+      'Content-Type': 'image/png',
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  })
 })
 
 const port = Number(process.env.PORT || 8787)

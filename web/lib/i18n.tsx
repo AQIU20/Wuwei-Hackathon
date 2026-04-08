@@ -186,6 +186,11 @@ export const dict = {
         immersive: "Immersive Sensory Engine",
         guardian: "Environment Guardian",
         phantom: "Phantom Awareness",
+        empathic: "Empathic Listener",
+        spatial: "Spatial Navigator",
+        ambient: "Ambient Orchestrator",
+        biofield: "Biofield Scanner",
+        synesthesia: "Synesthesia Engine",
       },
       card: {
         title: "Context Card",
@@ -401,6 +406,11 @@ export const dict = {
         immersive: "沉浸式感官引擎",
         guardian: "环境守卫者",
         phantom: "幻影感知",
+        empathic: "共情倾听者",
+        spatial: "空间导航仪",
+        ambient: "氛围编排师",
+        biofield: "生物场扫描仪",
+        synesthesia: "通感引擎",
       },
       card: {
         title: "语境卡牌",
