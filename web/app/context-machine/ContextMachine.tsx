@@ -261,12 +261,16 @@ export function ContextMachine() {
   async function postToGallery() {
     if (!cardImage) return;
     try {
-      await fetch(`${serverUrl}/v1/gallery`, {
+      const res = await fetch(`${serverUrl}/v1/gallery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: username || "Anonymous", sensors: active, easterEggs: unlockedTexts, imageBase64: cardImage }),
       });
       setPosted(true);
+      if (res.ok) {
+        const data = await res.json();
+        window.dispatchEvent(new CustomEvent("gallery-new-item", { detail: { id: data.id, username: username || "Anonymous", sensors: active, easterEggs: unlockedTexts, createdAt: new Date().toISOString() } }));
+      }
     } catch { /* */ }
   }
 
@@ -584,10 +588,20 @@ export function GalleryMarquee() {
       .catch(() => {});
   }, [serverUrl]);
 
+  // Listen for new gallery posts and prepend them instantly
+  useEffect(() => {
+    function onNewItem(e: Event) {
+      const item = (e as CustomEvent).detail as GalleryItem;
+      setGallery((prev) => [item, ...prev]);
+    }
+    window.addEventListener("gallery-new-item", onNewItem);
+    return () => window.removeEventListener("gallery-new-item", onNewItem);
+  }, []);
+
   if (gallery.length === 0) return null;
 
-  // Double for seamless loop
-  const items = [...gallery, ...gallery];
+  // Only duplicate for seamless loop when there are enough items
+  const items = gallery.length >= 4 ? [...gallery, ...gallery] : gallery;
 
   function sensorName(id: string) {
     return t.modules.items.find((m: { id: string }) => m.id === id)?.name ?? id;
@@ -598,12 +612,12 @@ export function GalleryMarquee() {
       <h2 className="mb-8 text-center font-display text-2xl font-semibold tracking-tight">
         {t.contextMachine.gallery.title}
       </h2>
-      <div className="gallery-marquee flex gap-5">
+      <div className={`flex gap-5 ${gallery.length >= 4 ? "gallery-marquee" : "justify-center flex-wrap"}`}>
         {items.map((item, i) => (
           <div
             key={`${item.id}-${i}`}
             className="gallery-card flex-none overflow-hidden rounded-xl border border-black/8 bg-white shadow-sm"
-            style={{ width: 280, animationDelay: `${(i % gallery.length) * -0.4}s` }}
+            style={{ width: 280, animationDelay: `${(i % Math.max(gallery.length, 1)) * -0.4}s` }}
           >
             <img
               src={`${serverUrl}/v1/gallery/${item.id}/image`}
