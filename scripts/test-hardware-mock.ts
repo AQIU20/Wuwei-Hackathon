@@ -3,7 +3,12 @@
  * 运行：bun scripts/test-hardware-mock.ts
  */
 
-import { actuatorState, BLOCKS, getCameraSnapshot, readSensor } from '../src/main/tools/hardware-mock/data'
+import {
+  actuatorState,
+  BLOCKS,
+  getCameraSnapshot,
+  readSensor,
+} from '../src/main/tools/hardware-mock/data'
 
 function section(title: string) {
   console.log('\n' + '═'.repeat(60))
@@ -14,7 +19,12 @@ function section(title: string) {
 function toolResult(toolName: string, input: unknown, output: string) {
   console.log(`\n▶ tool: ${toolName}`)
   console.log(`  input: ${JSON.stringify(input)}`)
-  console.log(`  output:\n${output.split('\n').map(l => '    ' + l).join('\n')}`)
+  console.log(
+    `  output:\n${output
+      .split('\n')
+      .map((l) => '    ' + l)
+      .join('\n')}`,
+  )
 }
 
 // ── 1. list_blocks ────────────────────────────────────────────────────────────
@@ -24,19 +34,21 @@ const allBlocks = BLOCKS
 const listOutput = [
   `Found ${allBlocks.length} block(s) (filter: all):`,
   '',
-  ...allBlocks.map(b =>
-    `• [${b.status.toUpperCase()}] ${b.block_id} — ${b.capability} (${b.type}) | chip: ${b.chip} | fw: ${b.firmware} | battery: ${b.battery}%`
+  ...allBlocks.map(
+    (b) =>
+      `• [${b.status.toUpperCase()}] ${b.block_id} — ${b.capability} (${b.type}) | chip: ${b.chip} | fw: ${b.firmware} | battery: ${b.battery}%`,
   ),
 ].join('\n')
 toolResult('list_blocks', { status_filter: 'all' }, listOutput)
 
 section('list_blocks — online only')
-const onlineBlocks = BLOCKS.filter(b => b.status === 'online')
+const onlineBlocks = BLOCKS.filter((b) => b.status === 'online')
 const onlineOutput = [
   `Found ${onlineBlocks.length} block(s) (filter: online):`,
   '',
-  ...onlineBlocks.map(b =>
-    `• [${b.status.toUpperCase()}] ${b.block_id} — ${b.capability} (${b.type}) | battery: ${b.battery}%`
+  ...onlineBlocks.map(
+    (b) =>
+      `• [${b.status.toUpperCase()}] ${b.block_id} — ${b.capability} (${b.type}) | battery: ${b.battery}%`,
   ),
 ].join('\n')
 toolResult('list_blocks', { status_filter: 'online' }, onlineOutput)
@@ -45,7 +57,7 @@ toolResult('list_blocks', { status_filter: 'online' }, onlineOutput)
 
 section('get_sensor_data — all sensors (3 reads each to show jitter)')
 
-const sensorBlocks = BLOCKS.filter(b => b.type === 'sensor' && b.status === 'online')
+const sensorBlocks = BLOCKS.filter((b) => b.type === 'sensor' && b.status === 'online')
 
 for (const block of sensorBlocks) {
   console.log(`\n  ── ${block.block_id} (${block.capability}) ──`)
@@ -68,7 +80,7 @@ section('get_sensor_data — offline block (error case)')
 toolResult(
   'get_sensor_data',
   { block_id: 'mic_01' },
-  'Error: block "mic_01" is offline and cannot be read.'
+  'Error: block "mic_01" is offline and cannot be read.',
 )
 
 // ── 4. get_camera_snapshot ────────────────────────────────────────────────────
@@ -99,9 +111,18 @@ const lightCmds = [
 for (const cmd of lightCmds) {
   // simulate state mutation inline
   if (cmd.action === 'set_color') {
-    actuatorState.light = { r: cmd.params.r, g: cmd.params.g, b: cmd.params.b, brightness: cmd.params.brightness, pattern: null }
+    actuatorState.light = {
+      r: cmd.params.r,
+      g: cmd.params.g,
+      b: cmd.params.b,
+      brightness: cmd.params.brightness,
+      pattern: null,
+    }
   } else if (cmd.action === 'set_pattern') {
-    actuatorState.light = { ...(actuatorState.light ?? { r: 255, g: 255, b: 255, brightness: 80 }), pattern: cmd.params.pattern }
+    actuatorState.light = {
+      ...(actuatorState.light ?? { r: 255, g: 255, b: 255, brightness: 80 }),
+      pattern: cmd.params.pattern,
+    }
   } else {
     actuatorState.light = { r: 0, g: 0, b: 0, brightness: 0, pattern: null }
   }

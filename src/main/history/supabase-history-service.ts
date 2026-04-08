@@ -128,8 +128,11 @@ export class SupabaseHistoryService {
       throw new Error('Supabase history is not configured')
     }
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!)
-    url.searchParams.set('select', 'id,block_id,block_type,block_capability,status,battery,recorded_at,source,payload')
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
+    url.searchParams.set(
+      'select',
+      'id,block_id,block_type,block_capability,status,battery,recorded_at,source,payload',
+    )
     url.searchParams.set('order', 'recorded_at.desc')
     url.searchParams.set('limit', String(params.limit))
     url.searchParams.set('recorded_at', `gte.${toIsoTime(params.minutes)}`)
@@ -168,7 +171,7 @@ export class SupabaseHistoryService {
   }
 
   private async insertRows(rows: SupabaseHistoryRow[]): Promise<void> {
-    const response = await fetch(new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!), {
+    const response = await fetch(new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()), {
       method: 'POST',
       headers: {
         ...this.buildHeaders(),
@@ -185,9 +188,26 @@ export class SupabaseHistoryService {
   }
 
   private buildHeaders(): Record<string, string> {
+    const serviceRoleKey = this.getServiceRoleKey()
     return {
-      apikey: this.serviceRoleKey!,
-      Authorization: `Bearer ${this.serviceRoleKey!}`,
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
     }
+  }
+
+  private getSupabaseUrl(): string {
+    if (!this.supabaseUrl) {
+      throw new Error('SUPABASE_URL is not configured')
+    }
+
+    return this.supabaseUrl
+  }
+
+  private getServiceRoleKey(): string {
+    if (!this.serviceRoleKey) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured')
+    }
+
+    return this.serviceRoleKey
   }
 }

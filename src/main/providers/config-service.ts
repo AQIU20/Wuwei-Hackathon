@@ -173,7 +173,9 @@ export class ConfigService {
   }
 
   private pickDefaultModel(providers: ProviderConfig[]): string | null {
-    const configuredProvider = providers.find((provider) => provider.apiKey && provider.models.length > 0)
+    const configuredProvider = providers.find(
+      (provider) => provider.apiKey && provider.models.length > 0,
+    )
     if (configuredProvider) {
       const preferredModel =
         configuredProvider.models.find((model) => model.id === 'gpt-5-mini') ??

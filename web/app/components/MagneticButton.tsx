@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { motion, useMotionValue, useSpring } from "framer-motion";
 import type { ComponentProps, ReactNode } from "react";
 import { useRef } from "react";
 import { cn } from "@/lib/cn";
@@ -22,9 +22,6 @@ export function MagneticButton({
   const y = useMotionValue(0);
   const springX = useSpring(x, { stiffness: 220, damping: 18, mass: 0.4 });
   const springY = useSpring(y, { stiffness: 220, damping: 18, mass: 0.4 });
-
-  const glowX = useTransform(springX, (v) => `${50 + v * 1.8}%`);
-  const glowY = useTransform(springY, (v) => `${50 + v * 1.8}%`);
 
   function handleMove(e: React.MouseEvent<HTMLButtonElement>) {
     const el = ref.current;

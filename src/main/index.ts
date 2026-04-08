@@ -5,7 +5,7 @@ import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import { AgentRuntime } from './agent'
 import { isMockHardwareMode, resolveHardwareMode } from './hardware/mode'
-import { HardwareStore, type HardwareIngressMessage } from './hardware/store'
+import { type HardwareIngressMessage, HardwareStore } from './hardware/store'
 import { SupabaseHistoryService } from './history/supabase-history-service'
 import { PreferenceMemoryService } from './memory/preference-memory-service'
 import { ConfigService } from './providers/config-service'
@@ -207,7 +207,9 @@ app.get(
       },
       onMessage(event: MessageEvent, ws: WebSocketConnection) {
         try {
-          const payload = JSON.parse(String(event.data)) as HardwareIngressMessage | { type: 'ping' }
+          const payload = JSON.parse(String(event.data)) as
+            | HardwareIngressMessage
+            | { type: 'ping' }
           if (payload.type === 'ping') {
             ws.send(JSON.stringify({ type: 'pong', at: new Date().toISOString() }))
             return

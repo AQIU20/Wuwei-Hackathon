@@ -1,10 +1,9 @@
 "use client";
 
-import { Canvas, useFrame, useThree } from "@react-three/fiber";
-import { useLoader } from "@react-three/fiber";
-import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { Canvas, useFrame, useLoader } from "@react-three/fiber";
+import { Suspense, useCallback, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { Suspense, useRef, useMemo, useState, useCallback } from "react";
+import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 
 type Particle = {
   position: THREE.Vector3;
@@ -63,6 +62,7 @@ function DebrisParticles({ particles }: { particles: Particle[] }) {
 function StlModel({ onSpawnDebris }: { onSpawnDebris: () => void }) {
   const geometry = useLoader(STLLoader, "/logo.stl");
   const meshRef = useRef<THREE.Mesh>(null);
+  const materialRef = useRef<THREE.ShaderMaterial>(null);
 
   // Center geometry on load
   const centeredGeometry = useMemo(() => {
@@ -132,20 +132,24 @@ function StlModel({ onSpawnDebris }: { onSpawnDebris: () => void }) {
     if (meshRef.current) {
       meshRef.current.rotation.y += delta * 0.25;
     }
-    material.uniforms.uTime.value += delta;
+    const shaderMaterial = materialRef.current;
+    if (shaderMaterial) {
+      shaderMaterial.uniforms.uTime.value += delta;
+    }
   });
 
   return (
     <mesh
       ref={meshRef}
       geometry={centeredGeometry}
-      material={material}
       scale={scale}
       onClick={(e) => {
         e.stopPropagation();
         onSpawnDebris();
       }}
-    />
+    >
+      <primitive object={material} ref={materialRef} attach="material" />
+    </mesh>
   );
 }
 
@@ -154,7 +158,7 @@ function Scene() {
 
   const spawnDebris = useCallback(() => {
     const colors = ["#ff6c37", "#ffd4bd", "#ffffff", "#ff9a6c", "#d4d4d8"];
-    const newParticles: Particle[] = Array.from({ length: 25 }, (_, i) => ({
+    const newParticles: Particle[] = Array.from({ length: 25 }, () => ({
       position: new THREE.Vector3(
         (Math.random() - 0.5) * 1.2,
         0.6 + Math.random() * 0.6,
@@ -165,7 +169,11 @@ function Scene() {
         -(Math.random() * 0.5 + 0.2),
         (Math.random() - 0.5) * 0.4,
       ),
-      rotation: new THREE.Euler(Math.random() * Math.PI, Math.random() * Math.PI, 0),
+      rotation: new THREE.Euler(
+        Math.random() * Math.PI,
+        Math.random() * Math.PI,
+        0,
+      ),
       rotSpeed: new THREE.Vector3(
         (Math.random() - 0.5) * 3,
         (Math.random() - 0.5) * 3,

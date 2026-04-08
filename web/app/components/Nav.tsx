@@ -1,7 +1,8 @@
 "use client";
 
-import { motion } from "framer-motion";
+import Image from "next/image";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useI18n } from "@/lib/i18n";
 import { LanguageToggle } from "./LanguageToggle";
@@ -26,7 +27,14 @@ export function Nav() {
         transition={{ duration: 0.6 }}
       >
         <Link href="/" className="flex items-center gap-3">
-          <img src="/logo-orange.svg" alt="无为创造" className="h-9 w-auto" />
+          <Image
+            src="/logo-orange.svg"
+            alt="无为创造"
+            width={136}
+            height={36}
+            className="h-9 w-auto"
+            priority
+          />
           <span className="font-display text-lg font-medium tracking-tight">
             无为创造 <span className="text-black/50">Unforce Make</span>
           </span>

@@ -1,6 +1,6 @@
-import type { WebSearchConfig } from '../providers/types'
 import type { HardwareStore } from '../hardware/store'
 import type { SupabaseHistoryService } from '../history/supabase-history-service'
+import type { WebSearchConfig } from '../providers/types'
 
 export interface ToolContext {
   cwd: string

@@ -7,7 +7,17 @@
   },
   "files": {
     "ignoreUnknown": true,
-    "includes": ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.json"]
+    "includes": [
+      "src/**/*.ts",
+      "src/**/*.tsx",
+      "scripts/**/*.ts",
+      "scripts/**/*.tsx",
+      "package.json",
+      "tsconfig*.json",
+      "biome.json",
+      "electron.vite.config.ts",
+      "eslint.config.mjs"
+    ]
   },
   "formatter": {
     "enabled": true,

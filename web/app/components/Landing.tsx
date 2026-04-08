@@ -1,18 +1,18 @@
 "use client";
 
-import { motion } from "framer-motion";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { useI18n } from "@/lib/i18n";
-import dynamic from "next/dynamic";
 import { MagneticButton } from "./MagneticButton";
+import { IsometricRoom } from "./IsometricRoom";
+import { SpotlightCard } from "./SpotlightCard";
 
 const FloatingBlocks = dynamic(
   () => import("./FloatingBlocks").then((m) => m.FloatingBlocks),
   { ssr: false },
 );
-import { SpotlightCard } from "./SpotlightCard";
-import { IsometricRoom } from "./IsometricRoom";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 24, filter: "blur(8px)" },
@@ -193,11 +193,12 @@ export function Landing() {
                 >
                   <div className="overflow-hidden rounded-2xl border border-black/8 bg-white/90 backdrop-blur-sm shadow-md transition-all duration-300 hover:border-black/20 hover:shadow-lg">
                     <div className="relative aspect-[4/3] overflow-hidden">
-                      <img
+                      <Image
                         src={s.src}
                         alt={s.alt}
-                        className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                        loading="lazy"
+                        fill
+                        sizes="220px"
+                        className="object-cover transition-transform duration-500 group-hover:scale-105"
                       />
                     </div>
                     <p className="px-3 py-2 text-[11px] leading-relaxed text-black/45">{s.alt}</p>
@@ -227,11 +228,8 @@ export function Landing() {
                   className="absolute z-30"
                   style={{ width: 64, ...pos }}
                 >
-                  <motion.img
-                    src={mod.src}
-                    alt={mod.alt}
-                    className="w-full drop-shadow-md"
-                    loading="lazy"
+                  <motion.div
+                    className="drop-shadow-md"
                     animate={{
                       y: [0, -6, 0, 4, 0],
                       rotate: [-2, 2, -1, 1, -2],
@@ -242,7 +240,15 @@ export function Landing() {
                       ease: "easeInOut",
                     }}
                     whileHover={{ scale: 1.15 }}
-                  />
+                  >
+                    <Image
+                      src={mod.src}
+                      alt={mod.alt}
+                      width={64}
+                      height={64}
+                      className="h-auto w-full"
+                    />
+                  </motion.div>
                 </motion.div>
               );
             })}
@@ -264,7 +270,14 @@ export function Landing() {
           {/* Module images row */}
           <div className="mb-6 flex flex-wrap justify-center gap-3">
             {moduleImages.map((mod) => (
-              <img key={mod.src} src={mod.src} alt={mod.alt} className="w-12 drop-shadow-md" loading="lazy" />
+              <Image
+                key={mod.src}
+                src={mod.src}
+                alt={mod.alt}
+                width={48}
+                height={48}
+                className="h-auto w-12 drop-shadow-md"
+              />
             ))}
           </div>
 
@@ -280,11 +293,12 @@ export function Landing() {
                 className="group overflow-hidden rounded-xl border border-black/8 bg-black/[0.02] transition-colors duration-300 hover:border-black/20"
               >
                 <div className="relative aspect-[4/3] overflow-hidden">
-                  <img
+                  <Image
                     src={s.src}
                     alt={s.alt}
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    loading="lazy"
+                    fill
+                    sizes="(max-width: 640px) 50vw, 33vw"
+                    className="object-cover transition-transform duration-500 group-hover:scale-105"
                   />
                 </div>
                 <p className="px-2 py-1.5 text-[10px] leading-relaxed text-black/45">{s.alt}</p>

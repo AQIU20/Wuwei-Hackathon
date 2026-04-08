@@ -33,6 +33,7 @@ type Debris = {
   dx: number;
   dy: number;
   rotate: number;
+  duration: number;
 };
 
 let debrisId = 0;
@@ -53,6 +54,7 @@ function spawnDebris(x: number, y: number, color: string): Debris[] {
       dx: spreadX,
       dy: fallY,
       rotate: Math.random() * 540 - 270,
+      duration: 1 + Math.random() * 0.5,
     });
   }
   return pieces;
@@ -149,7 +151,7 @@ function DebrisPiece({ d }: { d: Debris }) {
         opacity: [0.85, 0.6, 0],
       }}
       transition={{
-        duration: 1 + Math.random() * 0.5,
+        duration: d.duration,
         ease: [0.12, 0, 0.39, 0], // accelerating fall (gravity-like)
       }}
     />

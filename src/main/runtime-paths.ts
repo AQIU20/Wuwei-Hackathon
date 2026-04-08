@@ -16,7 +16,9 @@ function ensureDir(path: string): string {
 
 export function resolveRuntimePaths(): RuntimePaths {
   const cwd = resolve(process.env.AGENT_WORKSPACE_DIR || process.cwd())
-  const dataDir = ensureDir(resolve(process.env.AGENT_DATA_DIR || join(cwd, '.unforce-make-server')))
+  const dataDir = ensureDir(
+    resolve(process.env.AGENT_DATA_DIR || join(cwd, '.unforce-make-server')),
+  )
 
   return {
     cwd,

@@ -87,12 +87,11 @@ export function createHardwareHistoryTools(
         const lines = [
           `Found ${result.count} historical sample(s):`,
           '',
-          ...result.samples.map(
-            (sample) =>
-              [
-                `• ${sample.recordedAt} | ${sample.blockId} (${sample.blockCapability}, ${sample.blockType}, ${sample.status})`,
-                `  payload: ${JSON.stringify(sample.payload)}`,
-              ].join('\n'),
+          ...result.samples.map((sample) =>
+            [
+              `• ${sample.recordedAt} | ${sample.blockId} (${sample.blockCapability}, ${sample.blockType}, ${sample.status})`,
+              `  payload: ${JSON.stringify(sample.payload)}`,
+            ].join('\n'),
           ),
         ]
 

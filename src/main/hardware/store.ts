@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import {
   type ActuatorState,
-  type BlockState,
   BLOCKS,
+  type BlockState,
   getCameraSnapshot,
   readSensor,
 } from '../tools/hardware-mock/data'
@@ -28,7 +28,10 @@ export interface HardwareSnapshot {
 }
 
 export type HardwareIngressMessage =
-  | { type: 'announce'; block: Partial<BlockState> & Pick<BlockState, 'block_id' | 'capability' | 'type'> }
+  | {
+      type: 'announce'
+      block: Partial<BlockState> & Pick<BlockState, 'block_id' | 'capability' | 'type'>
+    }
   | { type: 'status'; block_id: string; status: BlockState['status']; battery?: number }
   | { type: 'telemetry'; block_id: string; data: Record<string, number>; timestamp?: number }
   | { type: 'snapshot'; block_id: string; scene: string; timestamp?: number }

@@ -5,7 +5,7 @@ import {
   useCallback,
   useContext,
   useEffect,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 
@@ -361,24 +361,60 @@ type Ctx = {
 };
 
 const I18nContext = createContext<Ctx | null>(null);
+const LOCALE_STORAGE_KEY = "unforce-locale";
+const LOCALE_EVENT = "unforce-locale-change";
+
+function getStoredLocale(): Locale | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
+  return stored === "zh" || stored === "en" ? stored : null;
+}
+
+function getPreferredLocale(): Locale {
+  const stored = getStoredLocale();
+  if (stored) {
+    return stored;
+  }
+
+  if (typeof navigator !== "undefined") {
+    const lang = navigator.language.toLowerCase();
+    if (lang.startsWith("zh")) {
+      return "zh";
+    }
+  }
+
+  return "en";
+}
+
+function subscribeToLocale(onStoreChange: () => void) {
+  if (typeof window === "undefined") {
+    return () => {};
+  }
+
+  const handleStorage = (event: StorageEvent) => {
+    if (event.key === null || event.key === LOCALE_STORAGE_KEY) {
+      onStoreChange();
+    }
+  };
+
+  window.addEventListener("storage", handleStorage);
+  window.addEventListener(LOCALE_EVENT, onStoreChange);
+
+  return () => {
+    window.removeEventListener("storage", handleStorage);
+    window.removeEventListener(LOCALE_EVENT, onStoreChange);
+  };
+}
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("en");
-
-  useEffect(() => {
-    const stored =
-      typeof window !== "undefined"
-        ? (localStorage.getItem("unforce-locale") as Locale | null)
-        : null;
-    if (stored === "zh" || stored === "en") {
-      setLocaleState(stored);
-      return;
-    }
-    if (typeof navigator !== "undefined") {
-      const lang = navigator.language.toLowerCase();
-      if (lang.startsWith("zh")) setLocaleState("zh");
-    }
-  }, []);
+  const locale = useSyncExternalStore<Locale>(
+    subscribeToLocale,
+    getPreferredLocale,
+    () => 'en',
+  );
 
   useEffect(() => {
     if (typeof document !== "undefined") {
@@ -387,9 +423,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [locale]);
 
   const setLocale = useCallback((l: Locale) => {
-    setLocaleState(l);
     if (typeof window !== "undefined") {
-      localStorage.setItem("unforce-locale", l);
+      localStorage.setItem(LOCALE_STORAGE_KEY, l);
+      window.dispatchEvent(new Event(LOCALE_EVENT));
     }
   }, []);
 
