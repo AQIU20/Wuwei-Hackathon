@@ -10,6 +10,13 @@ interface HardwareEventQueryRow extends HardwareEventInsert {
   ingested_at?: string
 }
 
+interface HardwareEventServiceOptions {
+  fetchImpl?: typeof fetch
+  serviceRoleKey?: string | null
+  supabaseUrl?: string | null
+  tableName?: string
+}
+
 export interface HardwareEventSample {
   capability: string | null
   confidence: number | null
@@ -43,14 +50,17 @@ function toIsoTime(minutesAgo: number): string {
 
 export class HardwareEventService {
   private readonly enabled: boolean
+  private readonly fetchImpl: typeof fetch
   private readonly serviceRoleKey: string | null
   private readonly supabaseUrl: string | null
   private readonly tableName: string
 
-  constructor() {
-    this.supabaseUrl = process.env.SUPABASE_URL ?? null
-    this.serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? null
-    this.tableName = process.env.SUPABASE_HARDWARE_EVENTS_TABLE || 'hardware_events'
+  constructor(options: HardwareEventServiceOptions = {}) {
+    this.fetchImpl = options.fetchImpl ?? fetch
+    this.supabaseUrl = options.supabaseUrl ?? process.env.SUPABASE_URL ?? null
+    this.serviceRoleKey = options.serviceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? null
+    this.tableName =
+      options.tableName ?? (process.env.SUPABASE_HARDWARE_EVENTS_TABLE || 'hardware_events')
     this.enabled = Boolean(this.supabaseUrl && this.serviceRoleKey)
   }
 
@@ -87,9 +97,54 @@ export class HardwareEventService {
     await this.insertRows(rows)
   }
 
+  async getEventByMsgId(msgId: string): Promise<HardwareEventSample | null> {
+    if (!this.enabled) {
+      throw new Error('Supabase hardware events are not configured')
+    }
+
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
+    url.searchParams.set(
+      'select',
+      'id,protocol_version,event_ts_ms,recorded_at,msg_id,topic,scope,subject,type,node_id,node_type,capability,signal_name,status,success,confidence,payload,ingested_at',
+    )
+    url.searchParams.set('msg_id', `eq.${msgId}`)
+    url.searchParams.set('limit', '1')
+
+    const response = await this.fetchImpl(url, {
+      headers: this.buildHeaders(),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Supabase query failed (${response.status})`)
+    }
+
+    const rows = (await response.json()) as HardwareEventQueryRow[]
+    const row = rows[0]
+    if (!row) return null
+
+    return {
+      capability: row.capability,
+      confidence: row.confidence,
+      eventTsMs: row.event_ts_ms,
+      msgId: row.msg_id,
+      nodeId: row.node_id,
+      nodeType: row.node_type,
+      payload: isRecord(row.payload) ? row.payload : {},
+      recordedAt: row.recorded_at,
+      scope: row.scope,
+      signalName: row.signal_name,
+      status: row.status,
+      subject: row.subject,
+      success: row.success,
+      topic: row.topic,
+      type: row.type,
+    }
+  }
+
   async queryEvents(params: {
     capability?: string
     limit: number
+    msgId?: string
     minutes: number
     nodeId?: string
     scope?: string
@@ -112,6 +167,10 @@ export class HardwareEventService {
       url.searchParams.set('node_id', `eq.${params.nodeId}`)
     }
 
+    if (params.msgId) {
+      url.searchParams.set('msg_id', `eq.${params.msgId}`)
+    }
+
     if (params.capability) {
       url.searchParams.set('capability', `eq.${params.capability}`)
     }
@@ -124,7 +183,7 @@ export class HardwareEventService {
       url.searchParams.set('type', `eq.${params.type}`)
     }
 
-    const response = await fetch(url, {
+    const response = await this.fetchImpl(url, {
       headers: this.buildHeaders(),
     })
 
@@ -159,7 +218,7 @@ export class HardwareEventService {
   private async insertRows(rows: HardwareEventInsert[]): Promise<void> {
     if (!this.enabled || rows.length === 0) return
 
-    const response = await fetch(new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()), {
+    const response = await this.fetchImpl(new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()), {
       method: 'POST',
       headers: {
         ...this.buildHeaders(),
@@ -171,7 +230,7 @@ export class HardwareEventService {
 
     if (!response.ok) {
       const message = await response.text()
-      console.error('[hardware-events] supabase insert failed:', response.status, message)
+      throw new Error(`Supabase insert failed (${response.status}): ${message}`)
     }
   }
 

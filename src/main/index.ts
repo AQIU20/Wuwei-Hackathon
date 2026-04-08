@@ -214,6 +214,7 @@ app.get('/v1/hardware-events', async (c) => {
   }
 
   const capability = c.req.query('capability')
+  const msgId = c.req.query('msg_id')
   const nodeId = c.req.query('node_id')
   const scope = c.req.query('scope')
   const type = c.req.query('type')
@@ -228,6 +229,7 @@ app.get('/v1/hardware-events', async (c) => {
       capability,
       limit,
       minutes,
+      msgId,
       nodeId,
       scope,
       type,

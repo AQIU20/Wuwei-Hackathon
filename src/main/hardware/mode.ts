@@ -1,9 +1,9 @@
-export type HardwareMode = 'live' | 'mock' | 'mqtt'
+export type HardwareMode = 'mock' | 'mqtt'
 
 export function resolveHardwareMode(): HardwareMode {
-  const raw = (process.env.HARDWARE_MODE || 'live').trim().toLowerCase()
+  const raw = (process.env.HARDWARE_MODE || 'mock').trim().toLowerCase()
   if (raw === 'mqtt') return 'mqtt'
-  return raw === 'mock' ? 'mock' : 'live'
+  return 'mock'
 }
 
 export function isMockHardwareMode(mode: HardwareMode): boolean {
