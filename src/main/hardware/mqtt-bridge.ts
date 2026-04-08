@@ -368,14 +368,11 @@ export class AihubMqttBridge {
 
       const compatibilityTopics = this.publishLegacyCommands
         ? [
-            await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'on' })).then(
-              (r) => r.topic,
-            ),
             await this.publishLegacy(
               blockId,
               'ws2812',
               JSON.stringify({
-                effect: 'status',
+                effect: 'siri',
                 brightness: wsBrightness,
                 hue,
               }),
@@ -395,19 +392,13 @@ export class AihubMqttBridge {
     }
 
     if (normalizedAction === 'on') {
+      const brt = typeof params.brightness === 'number' ? Math.round(clamp(params.brightness, 0, 100) * 2.55) : 180
       const compatibilityTopics = this.publishLegacyCommands
         ? [
-            await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'on' })).then(
-              (r) => r.topic,
-            ),
             await this.publishLegacy(
               blockId,
               'ws2812',
-              JSON.stringify({
-                effect: 'status',
-                brightness: 180,
-                hue: 0,
-              }),
+              JSON.stringify({ effect: 'rainbow', brightness: brt }),
             ).then((r) => r.topic),
           ]
         : undefined
