@@ -154,6 +154,9 @@ export function Landing() {
         <ContextMachineInline />
       </section>
 
+      {/* Gallery marquee — community cards */}
+      <GalleryMarquee />
+
       {/* Smart Space — 3D Room center, modules + scenes orbiting */}
       <section className="relative mx-auto max-w-7xl px-6 pb-28 lg:px-10">
         <motion.div
@@ -343,8 +346,6 @@ export function Landing() {
         <TeamMarquee />
       </section>
 
-      {/* Gallery marquee — community cards */}
-      <GalleryMarquee />
     </>
   );
 }

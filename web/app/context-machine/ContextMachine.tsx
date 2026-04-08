@@ -521,7 +521,7 @@ function CardContent({
       <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 6 }}>{username || "Anonymous"}</div>
 
       {/* Vibe badge */}
-      <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.08)", fontSize: 11, marginBottom: 16 }}>
+      <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.08)", fontSize: 11, marginBottom: 16, whiteSpace: "nowrap" }}>
         {vibeEmoji} {vibeLabel}
       </div>
 
