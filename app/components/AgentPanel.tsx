@@ -5,7 +5,6 @@ import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getAgentServerUrl, getHardwareWebSocketUrl } from "@/lib/agent-server";
 import { useI18n } from "@/lib/i18n";
 import { MagneticButton } from "./MagneticButton";
-import { MemoryPreview } from "./MemoryBrowser";
 import { SpotlightCard } from "./SpotlightCard";
 
 type Locale = "en" | "zh" | "ja";
@@ -532,11 +531,6 @@ export function AgentPanel() {
           </ul>
         </SpotlightCard>
 
-      </div>
-
-      {/* Memory – full width below the grid */}
-      <div className="lg:col-span-5">
-        <MemoryPreview />
       </div>
     </div>
   );
