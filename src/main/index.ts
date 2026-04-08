@@ -24,7 +24,7 @@ const memoryService = new PreferenceMemoryService(join(paths.memoryDir, 'prefere
 const hardwareMode = resolveHardwareMode()
 const mockHardwareMode = isMockHardwareMode(hardwareMode)
 const mqttHardwareMode = isMqttHardwareMode(hardwareMode)
-const hardware = new HardwareStore()
+const hardware = new HardwareStore({ seedMockBlocks: mockHardwareMode })
 const history = new SupabaseHistoryService()
 const galleryDb = new Database(join(paths.memoryDir, 'gallery.sqlite'))
 galleryDb.run('CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
@@ -263,6 +263,16 @@ app.get(
             | { type: 'ping' }
           if (payload.type === 'ping') {
             ws.send(JSON.stringify({ type: 'pong', at: new Date().toISOString() }))
+            return
+          }
+
+          if (!mockHardwareMode) {
+            ws.send(
+              JSON.stringify({
+                type: 'error',
+                message: 'Direct hardware ingress is disabled outside mock mode. Use MQTT topics instead.',
+              }),
+            )
             return
           }
 

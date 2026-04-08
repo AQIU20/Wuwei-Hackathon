@@ -58,6 +58,32 @@ export type HardwareBroadcast =
 
 type Listener = (event: HardwareBroadcast) => void
 
+interface HardwareStoreOptions {
+  seedMockBlocks?: boolean
+}
+
+function parseNodeMetaMap(raw: string | undefined): Record<string, string> {
+  if (!raw) return {}
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      return {}
+    }
+
+    const entries = Object.entries(parsed)
+    const map: Record<string, string> = {}
+    for (const [key, value] of entries) {
+      if (typeof value === 'string') {
+        map[key] = value
+      }
+    }
+    return map
+  } catch {
+    return {}
+  }
+}
+
 function cloneActuatorState(state: ActuatorState): ActuatorState {
   return {
     light: state.light ? { ...state.light } : undefined,
@@ -100,18 +126,26 @@ export class HardwareStore {
   private blocks = new Map<string, BlockSnapshot>()
   private cameraScenes = new Map<string, string>()
   private listeners = new Set<Listener>()
+  private readonly nodeDescriptions: Record<string, string>
+  private readonly nodeLabels: Record<string, string>
   private sensorReadings = new Map<string, Record<string, unknown>>()
 
-  constructor() {
-    for (const block of BLOCKS) {
-      this.blocks.set(block.block_id, { ...block })
+  constructor(options: HardwareStoreOptions = {}) {
+    const { seedMockBlocks = true } = options
+    this.nodeLabels = parseNodeMetaMap(process.env.HARDWARE_NODE_LABELS)
+    this.nodeDescriptions = parseNodeMetaMap(process.env.HARDWARE_NODE_DESCRIPTIONS)
 
-      if (block.type === 'sensor') {
-        this.sensorReadings.set(block.block_id, readSensor(block.capability))
-      }
+    if (seedMockBlocks) {
+      for (const block of BLOCKS) {
+        this.blocks.set(block.block_id, { ...block })
 
-      if (block.capability === 'camera') {
-        this.cameraScenes.set(block.block_id, getCameraSnapshot())
+        if (block.type === 'sensor') {
+          this.sensorReadings.set(block.block_id, readSensor(block.capability))
+        }
+
+        if (block.capability === 'camera') {
+          this.cameraScenes.set(block.block_id, getCameraSnapshot())
+        }
       }
     }
   }
@@ -181,6 +215,14 @@ export class HardwareStore {
 
   getBlock(blockId: string): BlockSnapshot | null {
     return this.getSnapshot().blocks.find((block) => block.block_id === blockId) ?? null
+  }
+
+  getNodeLabel(blockId: string): string {
+    return this.nodeLabels[blockId] || blockId
+  }
+
+  getNodeDescription(blockId: string): string | null {
+    return this.nodeDescriptions[blockId] || null
   }
 
   getSensorData(blockId: string): { block: BlockSnapshot; data: Record<string, unknown> } | null {

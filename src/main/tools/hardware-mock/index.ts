@@ -36,8 +36,15 @@ function createListBlocksTool(hardware: HardwareStore): ToolDefinition<typeof li
         `Found ${blocks.length} block(s) (filter: ${filter}):`,
         '',
         ...blocks.map(
-          (block) =>
-            `• [${block.status.toUpperCase()}] ${block.block_id} — ${block.capability} (${block.type}) | chip: ${block.chip} | fw: ${block.firmware} | battery: ${block.battery}%`,
+          (block) => {
+            const label = hardware.getNodeLabel(block.block_id)
+            const description = hardware.getNodeDescription(block.block_id)
+            const display = label === block.block_id ? block.block_id : `${label} (${block.block_id})`
+            const meta = `${display} — ${block.capability} (${block.type}) | chip: ${block.chip} | fw: ${block.firmware} | battery: ${block.battery}%`
+            return description
+              ? `• [${block.status.toUpperCase()}] ${meta} | desc: ${description}`
+              : `• [${block.status.toUpperCase()}] ${meta}`
+          },
         ),
       ]
 
@@ -310,7 +317,7 @@ function createControlActuatorTool(
           {
             type: 'text',
             text: [
-              `Command handled for ${params.block_id} (${block.capability}): ${params.action}`,
+              `Command handled for ${hardware.getNodeLabel(params.block_id)} (${params.block_id}, ${block.capability}): ${params.action}`,
               `Parameters: ${JSON.stringify(params.params ?? {})}`,
               ...publishSummary,
               '',
