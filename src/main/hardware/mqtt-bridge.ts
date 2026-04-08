@@ -353,6 +353,14 @@ export class AihubMqttBridge {
     }
 
     if (normalizedAction === 'on') {
+      const compatibilityTopics = this.publishLegacyCommands
+        ? [
+            await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'on' })).then(
+              (r) => r.topic,
+            ),
+          ]
+        : undefined
+
       const payload = buildCommandEnvelope(blockId, 'set_led', {
         brightness: 100,
         color: '#ffffff',
@@ -360,15 +368,25 @@ export class AihubMqttBridge {
         segment: null,
       })
 
-      return this.publishEnvelope(blockId, 'set_led', payload)
+      const result = await this.publishEnvelope(blockId, 'set_led', payload)
+      return { ...result, compatibilityTopics }
     }
 
     if (normalizedAction === 'off') {
+      const compatibilityTopics = this.publishLegacyCommands
+        ? [
+            await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'off' })).then(
+              (r) => r.topic,
+            ),
+          ]
+        : undefined
+
       const payload = buildCommandEnvelope(blockId, 'set_led', {
         mode: 'off',
       })
 
-      return this.publishEnvelope(blockId, 'set_led', payload)
+      const result = await this.publishEnvelope(blockId, 'set_led', payload)
+      return { ...result, compatibilityTopics }
     }
 
     if (normalizedAction === 'set_pattern') {
