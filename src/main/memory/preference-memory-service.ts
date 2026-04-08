@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { type Api, complete, type Model } from '@mariozechner/pi-ai'
 import type { ModelRegistry } from '@mariozechner/pi-coding-agent'
+import type { SupabaseMemoryService } from './supabase-memory-service'
 
 type MemorySourceType = 'explicit' | 'inferred'
 type MemoryStatus = 'active' | 'deleted'
@@ -193,14 +194,16 @@ function toPreferenceMemory(item: StoredPreferenceMemory): PreferenceMemory {
 export class PreferenceMemoryService {
   private filePath: string
   private store: MemoryStore = { ...EMPTY_STORE }
+  private supabaseMemory: SupabaseMemoryService | null = null
 
-  constructor(filePath?: string) {
+  constructor(filePath?: string, supabaseMemory?: SupabaseMemoryService) {
     const baseDir = filePath
       ? dirname(filePath)
       : join(process.env.AGENT_DATA_DIR || process.cwd(), 'memory')
 
     mkdirSync(baseDir, { recursive: true })
     this.filePath = filePath ?? join(baseDir, 'preferences.json')
+    this.supabaseMemory = supabaseMemory ?? null
     this.load()
   }
 
@@ -477,6 +480,45 @@ export class PreferenceMemoryService {
 
     if (changed) {
       this.persist()
+      this.syncToSupabase(operations)
+    }
+  }
+
+  private syncToSupabase(operations: ReconcilerOperation[]): void {
+    if (!this.supabaseMemory?.isEnabled()) return
+    const now = new Date().toISOString()
+
+    for (const op of operations) {
+      if (op.action === 'ADD' || op.action === 'UPDATE') {
+        const key = op.key ?? (op.action === 'UPDATE'
+          ? this.store.items.find(i => i.id === op.memoryId)?.key
+          : undefined)
+        const value = op.value
+        if (!key || !value) continue
+
+        const local = this.getActiveRowByKey(key)
+        void this.supabaseMemory
+          .upsertMemory({
+            home_id: null,
+            memory_type: 'preference',
+            memory_key: key,
+            memory_value: value,
+            confidence: local?.confidence ?? 0.5,
+            evidence_count: local?.evidenceCount ?? 1,
+            last_observed_at: now,
+            reason: op.reason ?? null,
+            status: 'active',
+          })
+          .catch((err) => console.error('[memory] supabase sync failed:', err))
+      }
+
+      if (op.action === 'DELETE' && op.memoryId) {
+        const local = this.store.items.find(i => i.id === op.memoryId)
+        if (!local) continue
+        void this.supabaseMemory
+          .deleteMemoryByKey(local.key)
+          .catch((err) => console.error('[memory] supabase delete sync failed:', err))
+      }
     }
   }
 

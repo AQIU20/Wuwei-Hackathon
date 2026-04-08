@@ -17,6 +17,7 @@ export const dict = {
     nav: {
       home: "Home",
       agent: "Agent",
+      memory: "Memory",
       dev: "Developers",
       docs: "Docs",
       cta: "Try Agent",
@@ -232,6 +233,7 @@ export const dict = {
     nav: {
       home: "首页",
       agent: "Agent",
+      memory: "记忆",
       dev: "开发者",
       docs: "文档",
       cta: "试试 Agent",
@@ -447,6 +449,7 @@ export const dict = {
     nav: {
       home: "ホーム",
       agent: "Agent",
+      memory: "記憶",
       dev: "開発者",
       docs: "ドキュメント",
       cta: "Agentを試す",

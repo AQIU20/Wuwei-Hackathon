@@ -11,6 +11,7 @@ import { type HardwareIngressMessage, HardwareStore } from './hardware/store'
 import { HardwareEventService } from './history/hardware-event-service'
 import { SupabaseHistoryService } from './history/supabase-history-service'
 import { PreferenceMemoryService } from './memory/preference-memory-service'
+import { SupabaseMemoryService } from './memory/supabase-memory-service'
 import { ConfigService } from './providers/config-service'
 import { ProviderRegistry } from './providers/registry'
 import { resolveRuntimePaths } from './runtime-paths'
@@ -20,7 +21,8 @@ const configService = new ConfigService(paths.configDir)
 configService.init()
 
 const registry = new ProviderRegistry(configService)
-const memoryService = new PreferenceMemoryService(join(paths.memoryDir, 'preferences.sqlite'))
+const supabaseMemory = new SupabaseMemoryService()
+const memoryService = new PreferenceMemoryService(join(paths.memoryDir, 'preferences.sqlite'), supabaseMemory)
 const hardwareMode = resolveHardwareMode()
 const mqttHardwareMode = isMqttHardwareMode(hardwareMode)
 const hardware = new HardwareStore()
@@ -404,6 +406,73 @@ app.post('/v1/chat/sessions/:sessionId/messages', async (c) => {
       { error: error instanceof Error ? error.message : 'Failed to prompt session' },
       404,
     )
+  }
+})
+
+// --- Memory routes ---
+
+app.get('/v1/memory/preferences', async (c) => {
+  try {
+    const items = memoryService.listManageablePreferences().map((item) => ({
+      id: item.id,
+      home_id: null,
+      memory_type: 'preference',
+      memory_key: item.key,
+      memory_value: item.value,
+      confidence: item.confidence,
+      evidence_count: item.evidenceCount,
+      last_observed_at: item.updatedAt,
+      reason: item.reason,
+      status: 'active',
+      updated_at: item.updatedAt,
+    }))
+    return c.json({ items, remoteEnabled: supabaseMemory.isEnabled() })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Failed to list memories' }, 500)
+  }
+})
+
+app.patch('/v1/memory/preferences/:id', async (c) => {
+  const id = c.req.param('id')
+  const body = (await c.req.json()) as { value?: string; reason?: string | null }
+  const value = body.value?.trim()
+  if (!value) return c.json({ error: 'value is required' }, 400)
+  try {
+    memoryService.updatePreference({ id, value, reason: body.reason ?? null })
+    const local = memoryService.listManageablePreferences().find((m) => m.id === id)
+    if (local && supabaseMemory.isEnabled()) {
+      await supabaseMemory.upsertMemory({
+        home_id: null,
+        memory_type: 'preference',
+        memory_key: local.key,
+        memory_value: local.value,
+        confidence: local.confidence,
+        evidence_count: local.evidenceCount,
+        last_observed_at: local.updatedAt,
+        reason: local.reason ?? null,
+        status: 'active',
+      })
+    }
+    return c.json({ ok: true })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Update failed' }, 500)
+  }
+})
+
+app.delete('/v1/memory/preferences/:id', async (c) => {
+  const id = c.req.param('id')
+  try {
+    const local = memoryService.listManageablePreferences().find((m) => m.id === id)
+    if (!local) {
+      return c.json({ error: 'Memory item not found' }, 404)
+    }
+    memoryService.deletePreference(id)
+    if (supabaseMemory.isEnabled()) {
+      await supabaseMemory.deleteMemoryByKey(local.key)
+    }
+    return c.json({ ok: true })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Delete failed' }, 500)
   }
 })
 
