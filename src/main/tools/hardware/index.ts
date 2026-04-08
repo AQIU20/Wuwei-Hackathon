@@ -350,17 +350,17 @@ function createGetCameraSnapshotTool(
     name: 'get_camera_snapshot',
     label: 'Get Camera Snapshot',
     description:
-      'Capture a snapshot from a camera block and get a visual description of the scene via AI vision analysis.',
+      'Return the latest camera snapshot/scene description currently cached for a camera block.',
     promptSnippet: 'Capture and analyze a camera snapshot.',
     promptGuidelines: [
       'Use list_blocks to confirm the camera block_id before calling this tool',
-      'The snapshot is analyzed by a vision model — describe what you see to the user',
+      'This tool returns the latest scene already cached from hardware ingress',
       'If the user asks "what do you see" or "look around", use this tool',
     ],
     parameters: getCameraSnapshotSchema,
     async execute(_id: string, params: GetCameraSnapshotParams) {
+      const block = hardware.getBlock(params.block_id)
       const result = hardware.getCameraScene(params.block_id)
-      const block = result?.block
 
       if (!block) {
         return {
@@ -384,6 +384,19 @@ function createGetCameraSnapshotTool(
             {
               type: 'text',
               text: `Error: "${params.block_id}" is not a camera (capability: ${block.capability}).`,
+            },
+          ],
+          details: undefined,
+          isError: true,
+        }
+      }
+
+      if (!result) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Error: no camera snapshot is cached yet for "${params.block_id}".`,
             },
           ],
           details: undefined,

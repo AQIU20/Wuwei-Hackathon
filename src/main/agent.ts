@@ -19,6 +19,7 @@ import {
 } from '@mariozechner/pi-coding-agent'
 import type { AihubMqttBridge } from './hardware/mqtt-bridge'
 import type { HardwareStore } from './hardware/store'
+import type { HardwareEventService } from './history/hardware-event-service'
 import type { SupabaseHistoryService } from './history/supabase-history-service'
 import type { PreferenceMemoryService } from './memory/preference-memory-service'
 import type { ConfigService } from './providers/config-service'
@@ -38,7 +39,9 @@ when you want to control a known device. The device-specific tools are pre-confi
 block_id, capability, and MQTT routing — they are more reliable.
 
 Use list_blocks to discover available hardware.
-Use get_sensor_data / get_hardware_history for sensor readings and trends.
+Use get_sensor_data for current readings.
+Use get_hardware_history for state trends over time.
+Use get_hardware_events for event questions, detections, command responses, ingress tracing, and recent event counts.
 When the user asks to control a device by name (e.g. "桌面上的灯", "desk light"), look for a
 device-specific tool whose label matches, then call it directly.
 Supported light actions: "on", "off", "set_color" (with r,g,b,brightness), "set_pattern" (breathing/strobe/rainbow/steady/siri/particles).`
@@ -117,6 +120,7 @@ export interface AgentRuntimeOptions {
   configService: ConfigService
   cwd: string
   hardware: HardwareStore
+  hardwareEvents?: HardwareEventService | null
   history?: SupabaseHistoryService | null
   memoryService: PreferenceMemoryService
   mqttBridge?: AihubMqttBridge | null
@@ -370,6 +374,7 @@ export class AgentRuntime {
       cwd: this.options.cwd,
       getWebSearchConfig: () => this.options.configService.getWebSearchConfig(),
       hardware: this.options.hardware,
+      hardwareEvents: this.options.hardwareEvents ?? null,
       history: this.options.history ?? null,
       mqttBridge: this.options.mqttBridge ?? null,
     })

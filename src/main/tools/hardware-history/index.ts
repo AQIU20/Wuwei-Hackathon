@@ -2,6 +2,19 @@ import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
 import { type Static, Type } from '@sinclair/typebox'
 import type { SupabaseHistoryService } from '../../history/supabase-history-service'
 
+const capabilitySchema = Type.Union([
+  Type.Literal('environment'),
+  Type.Literal('air_quality'),
+  Type.Literal('heart_rate_oximeter'),
+  Type.Literal('imu'),
+  Type.Literal('camera'),
+  Type.Literal('audio_video_hub'),
+  Type.Literal('light'),
+  Type.Literal('presence'),
+  Type.Literal('voice_activity'),
+  Type.Literal('barometric_pressure'),
+])
+
 const getHardwareHistorySchema = Type.Object({
   block_id: Type.Optional(
     Type.String({
@@ -9,9 +22,7 @@ const getHardwareHistorySchema = Type.Object({
     }),
   ),
   capability: Type.Optional(
-    Type.String({
-      description: 'Optional capability filter, e.g. "heart_rate", "temperature", "camera".',
-    }),
+    capabilitySchema,
   ),
   lookback_minutes: Type.Optional(
     Type.Number({
@@ -47,6 +58,7 @@ export function createHardwareHistoryTools(
       promptSnippet: 'Read historical hardware data from Supabase.',
       promptGuidelines: [
         'Use this tool for questions about trends, averages, past values, or what changed over time',
+        'Do not use this tool for raw event counting, detections, or ingress tracing; use get_hardware_events for those',
         'Prefer block_id when the user names a specific module',
         'If Supabase history is unavailable, explain that historical storage is not configured',
       ],

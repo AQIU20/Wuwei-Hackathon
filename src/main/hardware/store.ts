@@ -1,11 +1,20 @@
 import { randomUUID } from 'node:crypto'
-import {
-  type ActuatorState,
-  BLOCKS,
-  type BlockState,
-  getCameraSnapshot,
-  readSensor,
-} from '../tools/hardware-mock/data'
+
+export interface BlockState {
+  block_id: string
+  type: 'sensor' | 'stream' | 'actuator'
+  capability: string
+  chip: string
+  firmware: string
+  battery: number
+  status: 'online' | 'offline'
+  last_seen_ms: number
+}
+
+export interface ActuatorState {
+  light?: { r: number; g: number; b: number; brightness: number; pattern: string | null }
+  vibration?: { active: boolean; pattern: string | null; intensity: number }
+}
 
 export interface BlockSnapshot extends BlockState {
   latest?: Record<string, unknown>
@@ -57,10 +66,6 @@ export type HardwareBroadcast =
   | { type: 'error'; message: string }
 
 type Listener = (event: HardwareBroadcast) => void
-
-interface HardwareStoreOptions {
-  seedMockBlocks?: boolean
-}
 
 function parseNodeMetaMap(raw: string | undefined): Record<string, string> {
   if (!raw) return {}
@@ -152,8 +157,7 @@ export class HardwareStore {
   private readonly nodeLabels: Record<string, string>
   private sensorReadings = new Map<string, Record<string, unknown>>()
 
-  constructor(options: HardwareStoreOptions = {}) {
-    const { seedMockBlocks = true } = options
+  constructor() {
     this.nodeLabels = parseNodeMetaMap(
       process.env.HARDWARE_NODE_LABELS ??
         process.env.HARDWARE_NODE_NAMES ??
@@ -162,42 +166,6 @@ export class HardwareStore {
     this.nodeDescriptions = parseNodeMetaMap(
       process.env.HARDWARE_NODE_DESCRIPTIONS ?? process.env.HARDWARE_NODE_DESC,
     )
-
-    if (seedMockBlocks) {
-      for (const block of BLOCKS) {
-        this.blocks.set(block.block_id, { ...block })
-
-        if (block.type === 'sensor') {
-          this.sensorReadings.set(block.block_id, readSensor(block.capability))
-        }
-
-        if (block.capability === 'camera') {
-          this.cameraScenes.set(block.block_id, getCameraSnapshot())
-        }
-      }
-    }
-  }
-
-  startSimulation(intervalMs = 3000): () => void {
-    const timer = setInterval(() => {
-      for (const block of this.blocks.values()) {
-        if (block.status !== 'online') continue
-
-        block.last_seen_ms = Date.now()
-
-        if (block.type === 'sensor') {
-          this.sensorReadings.set(block.block_id, readSensor(block.capability))
-        }
-
-        if (block.capability === 'camera') {
-          this.cameraScenes.set(block.block_id, getCameraSnapshot())
-        }
-      }
-
-      this.broadcast({ type: 'update', payload: this.getSnapshot() })
-    }, intervalMs)
-
-    return () => clearInterval(timer)
   }
 
   subscribe(listener: Listener): () => void {
@@ -271,9 +239,12 @@ export class HardwareStore {
     const block = this.blocks.get(blockId)
     if (!block || block.capability !== 'camera') return null
 
+    const scene = this.cameraScenes.get(blockId)
+    if (!scene) return null
+
     return {
       block,
-      scene: this.cameraScenes.get(blockId) ?? getCameraSnapshot(),
+      scene,
     }
   }
 

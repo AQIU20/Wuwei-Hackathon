@@ -5,7 +5,7 @@ import { Hono } from 'hono'
 import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import { AgentRuntime } from './agent'
-import { isMockHardwareMode, isMqttHardwareMode, resolveHardwareMode } from './hardware/mode'
+import { isMqttHardwareMode, resolveHardwareMode } from './hardware/mode'
 import { AihubMqttBridge } from './hardware/mqtt-bridge'
 import { type HardwareIngressMessage, HardwareStore } from './hardware/store'
 import { HardwareEventService } from './history/hardware-event-service'
@@ -22,9 +22,8 @@ configService.init()
 const registry = new ProviderRegistry(configService)
 const memoryService = new PreferenceMemoryService(join(paths.memoryDir, 'preferences.sqlite'))
 const hardwareMode = resolveHardwareMode()
-const mockHardwareMode = isMockHardwareMode(hardwareMode)
 const mqttHardwareMode = isMqttHardwareMode(hardwareMode)
-const hardware = new HardwareStore({ seedMockBlocks: mockHardwareMode })
+const hardware = new HardwareStore()
 const history = new SupabaseHistoryService()
 const galleryDb = new Database(join(paths.memoryDir, 'gallery.sqlite'))
 galleryDb.run('CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
@@ -36,7 +35,6 @@ const mqttBridge = new AihubMqttBridge({
   eventService: hardwareEvents,
   hardware,
 })
-const stopSimulation = mockHardwareMode ? hardware.startSimulation() : null
 const sessions = new Map<string, AgentRuntime>()
 type WebSocketConnection = { send: (data: string) => void }
 const BunRuntime = globalThis as unknown as {
@@ -57,6 +55,7 @@ function createRuntime(): AgentRuntime {
     configService,
     cwd: paths.cwd,
     hardware,
+    hardwareEvents,
     history,
     memoryService,
     mqttBridge: mqttHardwareMode ? mqttBridge : null,
@@ -66,12 +65,7 @@ function createRuntime(): AgentRuntime {
 }
 
 hardware.subscribe((event) => {
-  if (
-    mockHardwareMode &&
-    history &&
-    (event.type === 'snapshot' || event.type === 'update') &&
-    history.isEnabled()
-  ) {
+  if (history && (event.type === 'snapshot' || event.type === 'update') && history.isEnabled()) {
     void history.persistSnapshot(event.payload, event.type).catch((error) => {
       console.error('[history] persist snapshot failed:', error)
     })
@@ -270,20 +264,14 @@ app.get(
             return
           }
 
-          if (!mockHardwareMode) {
-            ws.send(
-              JSON.stringify({
-                type: 'error',
-                message: 'Direct hardware ingress is disabled outside mock mode. Use MQTT topics instead.',
-              }),
-            )
-            return
-          }
-
-          const result = hardware.applyMessage(payload)
-          if (!result.ok) {
-            ws.send(JSON.stringify({ type: 'error', message: result.error }))
-          }
+          const _ignored = payload as HardwareIngressMessage
+          void _ignored
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              message: 'Direct hardware ingress is disabled. Use MQTT topics instead.',
+            }),
+          )
         } catch (error) {
           ws.send(
             JSON.stringify({
@@ -536,12 +524,11 @@ console.log(
       ? mqttBridge.isEnabled()
         ? 'configured'
         : 'disabled (no MQTT_BROKER_URI)'
-      : 'inactive (HARDWARE_MODE is not mqtt)'
+      : 'inactive'
   }`,
 )
 
 function shutdown(): void {
-  stopSimulation?.()
   if (mqttHardwareMode) {
     void mqttBridge.stop().catch((error) => {
       console.error('[mqtt] bridge stop failed:', error)

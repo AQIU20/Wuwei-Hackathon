@@ -42,7 +42,9 @@ describe('HardwareEventService', () => {
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.method).toBe('POST')
-    expect(requests[0]?.url).toBe('https://example.supabase.co/rest/v1/hardware_events')
+    expect(requests[0]?.url).toBe(
+      'https://example.supabase.co/rest/v1/hardware_events?on_conflict=msg_id',
+    )
 
     const [row] = JSON.parse(requests[0]?.body ?? '[]') as Array<Record<string, unknown>>
     expect(row?.msg_id).toBe('msg-123')

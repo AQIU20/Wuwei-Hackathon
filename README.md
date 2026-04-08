@@ -23,9 +23,8 @@ bun install
 HARDWARE_MODE=mqtt OPENAI_API_KEY=... bun run dev
 ```
 
-Modes:
-- `HARDWARE_MODE=mqtt`: the only real hardware ingress mode. The server connects directly to the MQTT broker and ingests AI Hub topics.
-- `HARDWARE_MODE=mock`: local demo mode only. It generates simulated sensor updates in memory.
+Mode:
+- `HARDWARE_MODE=mqtt`: the server connects directly to the MQTT broker and ingests AI Hub topics.
 
 Server endpoints:
 - `GET /health`
@@ -116,7 +115,7 @@ Deploy check:
 - Hardware updates are distributed over WebSocket through the shared `HardwareStore`.
 - Raw MQTT envelopes can be persisted into Supabase `hardware_events` through the built-in AI Hub MQTT bridge.
 - Set `HARDWARE_MODE=mqtt` to subscribe to `aihub/status/#`, `aihub/sensor/#`, `aihub/event/#`, and `aihub/resp/#` and map them into the in-memory hardware graph.
-- Direct hardware writes over `/v1/hardware/ws` are rejected outside `mock` mode, so MQTT remains the only real ingress path.
+- Direct hardware writes over `/v1/hardware/ws` are rejected, so MQTT remains the only ingress path.
 - Persistent session/memory/config data lives under `AGENT_DATA_DIR`.
 - The old `web/app/api/chat` path is no longer the active chat path for the website UI.
 

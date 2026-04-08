@@ -15,6 +15,14 @@ interface SupabaseQueryRow extends SupabaseHistoryRow {
   id?: string
 }
 
+interface SupabaseHistoryServiceOptions {
+  fetchImpl?: typeof fetch
+  persistIntervalMs?: number
+  serviceRoleKey?: string | null
+  supabaseUrl?: string | null
+  tableName?: string
+}
+
 export interface HistorySample {
   battery: number
   blockCapability: string
@@ -59,17 +67,20 @@ function buildRowPayload(block: HardwareSnapshot['blocks'][number]): Record<stri
 
 export class SupabaseHistoryService {
   private readonly enabled: boolean
+  private readonly fetchImpl: typeof fetch
   private readonly persistIntervalMs: number
   private readonly tableName: string
   private readonly serviceRoleKey: string | null
   private readonly supabaseUrl: string | null
-  private lastPersistAt = 0
+  private readonly lastPersistAtByBlock = new Map<string, number>()
 
-  constructor() {
-    this.supabaseUrl = process.env.SUPABASE_URL ?? null
-    this.serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? null
-    this.tableName = process.env.SUPABASE_HISTORY_TABLE || 'hardware_history'
-    this.persistIntervalMs = Number(process.env.SUPABASE_PERSIST_INTERVAL_MS || 15_000)
+  constructor(options: SupabaseHistoryServiceOptions = {}) {
+    this.fetchImpl = options.fetchImpl ?? fetch
+    this.supabaseUrl = options.supabaseUrl ?? process.env.SUPABASE_URL ?? null
+    this.serviceRoleKey = options.serviceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? null
+    this.tableName = options.tableName ?? (process.env.SUPABASE_HISTORY_TABLE || 'hardware_history')
+    this.persistIntervalMs =
+      options.persistIntervalMs ?? Number(process.env.SUPABASE_PERSIST_INTERVAL_MS || 15_000)
     this.enabled = Boolean(this.supabaseUrl && this.serviceRoleKey)
   }
 
@@ -80,7 +91,7 @@ export class SupabaseHistoryService {
   getStatus() {
     return {
       enabled: this.enabled,
-      mode: 'mock',
+      mode: 'mqtt',
       persistIntervalMs: this.persistIntervalMs,
       tableName: this.tableName,
     }
@@ -90,15 +101,24 @@ export class SupabaseHistoryService {
     if (!this.enabled) return
 
     const now = Date.now()
-    if (now - this.lastPersistAt < this.persistIntervalMs) return
-    this.lastPersistAt = now
 
-    const rows = snapshot.blocks
+    const eligibleRows = snapshot.blocks
       .map((block) => {
         const payload = buildRowPayload(block)
         if (Object.keys(payload).length === 0) {
           return null
         }
+
+        const lastPersistAt = this.lastPersistAtByBlock.get(block.block_id) ?? 0
+        if (now - lastPersistAt < this.persistIntervalMs) {
+          return null
+        }
+
+        const recordedAt = new Date(
+          Number.isFinite(block.last_seen_ms) && block.last_seen_ms > 0
+            ? block.last_seen_ms
+            : Date.parse(snapshot.updatedAt),
+        ).toISOString()
 
         return {
           battery: block.battery,
@@ -106,16 +126,21 @@ export class SupabaseHistoryService {
           block_id: block.block_id,
           block_type: block.type,
           payload,
-          recorded_at: snapshot.updatedAt,
+          recorded_at: recordedAt,
           source,
           status: block.status,
         }
       })
       .filter((row): row is NonNullable<typeof row> => row !== null)
 
-    if (rows.length === 0) return
+    if (eligibleRows.length === 0) return
 
-    await this.insertRows(rows)
+    const inserted = await this.insertRows(eligibleRows)
+    if (!inserted) return
+
+    for (const row of eligibleRows) {
+      this.lastPersistAtByBlock.set(row.block_id, now)
+    }
   }
 
   async queryHistory(params: {
@@ -145,7 +170,7 @@ export class SupabaseHistoryService {
       url.searchParams.set('block_capability', `eq.${params.capability}`)
     }
 
-    const response = await fetch(url, {
+    const response = await this.fetchImpl(url, {
       headers: this.buildHeaders(),
     })
 
@@ -170,8 +195,8 @@ export class SupabaseHistoryService {
     }
   }
 
-  private async insertRows(rows: SupabaseHistoryRow[]): Promise<void> {
-    const response = await fetch(new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()), {
+  private async insertRows(rows: SupabaseHistoryRow[]): Promise<boolean> {
+    const response = await this.fetchImpl(new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()), {
       method: 'POST',
       headers: {
         ...this.buildHeaders(),
@@ -184,7 +209,10 @@ export class SupabaseHistoryService {
     if (!response.ok) {
       const message = await response.text()
       console.error('[history] supabase insert failed:', response.status, message)
+      return false
     }
+
+    return true
   }
 
   private buildHeaders(): Record<string, string> {
