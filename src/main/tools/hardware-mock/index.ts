@@ -3,6 +3,199 @@ import { type Static, Type } from '@sinclair/typebox'
 import type { AihubMqttBridge } from '../../hardware/mqtt-bridge'
 import type { HardwareStore } from '../../hardware/store'
 
+type PresetCapability = 'light' | 'sound' | 'vibration'
+
+interface ActuatorToolPreset {
+  blockId: string
+  capability: PresetCapability
+  description: string
+  label: string
+  name: string
+}
+
+const DEFAULT_ACTUATOR_TOOL_PRESETS: ActuatorToolPreset[] = [
+  {
+    name: 'desk_test_led_control',
+    label: 'Desk Test LED Control',
+    description:
+      'Control the desk test LED light actuator (led_fd8480). Use this tool first when user asks to turn on/off, set rainbow, or switch lighting effects.',
+    blockId: 'led_fd8480',
+    capability: 'light',
+  },
+]
+
+function normalizeToolName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+function parseActuatorToolPresets(raw: string | undefined): ActuatorToolPreset[] {
+  if (!raw) return DEFAULT_ACTUATOR_TOOL_PRESETS
+
+  try {
+    const parsed = JSON.parse(raw) as unknown
+    if (!Array.isArray(parsed)) {
+      return DEFAULT_ACTUATOR_TOOL_PRESETS
+    }
+
+    const presets: ActuatorToolPreset[] = []
+    for (const item of parsed) {
+      if (typeof item !== 'object' || item === null) continue
+      const row = item as Record<string, unknown>
+      const blockId = typeof row.block_id === 'string' ? row.block_id.trim() : ''
+      const capability = typeof row.capability === 'string' ? row.capability.trim() : ''
+      const label = typeof row.label === 'string' ? row.label.trim() : ''
+      const description = typeof row.description === 'string' ? row.description.trim() : ''
+      const name = typeof row.name === 'string' ? normalizeToolName(row.name) : ''
+
+      if (!blockId || !label || !description || !name) continue
+      if (capability !== 'light' && capability !== 'sound' && capability !== 'vibration') continue
+
+      presets.push({
+        blockId,
+        capability,
+        description,
+        label,
+        name,
+      })
+    }
+
+    return presets.length > 0 ? presets : DEFAULT_ACTUATOR_TOOL_PRESETS
+  } catch {
+    return DEFAULT_ACTUATOR_TOOL_PRESETS
+  }
+}
+
+const presetActuatorControlSchema = Type.Object({
+  action: Type.String({
+    description:
+      'Action to perform. Light: "on", "set_color", "set_pattern", "off". Vibration: "pulse", "pattern", "off". Sound: "play", "stop".',
+  }),
+  params: Type.Optional(
+    Type.Record(Type.String(), Type.Unknown(), {
+      description:
+        'Action parameters. light set_color: {r,g,b,brightness}; light set_pattern: {pattern,brightness,speed_ms}; vibration pulse/pattern: {intensity,duration_ms}; sound play: {clip,volume}.',
+    }),
+  ),
+})
+
+type PresetActuatorControlParams = Static<typeof presetActuatorControlSchema>
+
+async function executeActuatorCommand(args: {
+  action: string
+  blockId: string
+  hardware: HardwareStore
+  mqttBridge: AihubMqttBridge | null
+  params?: Record<string, unknown>
+}) {
+  const { action, blockId, hardware, mqttBridge } = args
+  const params = args.params ?? {}
+  const block = hardware.getBlock(blockId)
+
+  if (!block) {
+    return {
+      content: [{ type: 'text' as const, text: `Error: block "${blockId}" not found.` }],
+      details: undefined,
+      isError: true,
+    }
+  }
+
+  if (block.status === 'offline') {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Error: actuator "${blockId}" is offline and cannot be controlled.`,
+        },
+      ],
+      details: undefined,
+      isError: true,
+    }
+  }
+
+  if (block.type !== 'actuator') {
+    return {
+      content: [
+        {
+          type: 'text' as const,
+          text: `Error: "${blockId}" is not an actuator (type: ${block.type}).`,
+        },
+      ],
+      details: undefined,
+      isError: true,
+    }
+  }
+
+  const next = hardware.controlActuator(blockId, action, params)
+  const commandResult = mqttBridge
+    ? await mqttBridge.publishActuatorCommand(blockId, action, params)
+    : null
+  const publishSummary = mqttBridge
+    ? commandResult
+      ? [
+          `MQTT topic: ${commandResult.topic}`,
+          `MQTT payload: ${commandResult.payload}`,
+          ...(commandResult.compatibilityTopics?.length
+            ? [`MQTT compatibility topics: ${commandResult.compatibilityTopics.join(', ')}`]
+            : []),
+        ]
+      : ['MQTT publish: not sent for this action mapping']
+    : ['MQTT publish: disabled (local state only)']
+  const stateStr = JSON.stringify(next?.state ?? {}, null, 2)
+
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: [
+          `Command handled for ${hardware.getNodeLabel(blockId)} (${blockId}, ${block.capability}): ${action}`,
+          `Parameters: ${JSON.stringify(params)}`,
+          ...publishSummary,
+          '',
+          'Current actuator state:',
+          stateStr,
+        ].join('\n'),
+      },
+    ],
+    details: undefined,
+  }
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function createPresetActuatorTools(hardware: HardwareStore, mqttBridge: AihubMqttBridge | null): ToolDefinition<any, any, any>[] {
+  const presets = parseActuatorToolPresets(process.env.HARDWARE_ACTUATOR_TOOL_PRESETS)
+
+  return presets.map((preset) => ({
+    name: preset.name,
+    label: preset.label,
+    description: preset.description,
+    promptSnippet:
+      preset.capability === 'light'
+        ? `Control ${preset.label} for on/off/color/pattern requests.`
+        : `Control ${preset.label} actuator actions.`,
+    promptGuidelines: [
+      `This tool is bound to fixed block_id "${preset.blockId}". Do not ask user for another ID when this device matches intent.`,
+      'Prefer this preset tool over generic control_actuator when user asks for this specific device.',
+      preset.capability === 'light'
+        ? 'For LED effects, prefer action "set_pattern" with params like { pattern: "rainbow", brightness: 80 }.'
+        : 'Use capability-appropriate actions and params.',
+    ],
+    parameters: presetActuatorControlSchema,
+    async execute(_id: string, params: PresetActuatorControlParams) {
+      return executeActuatorCommand({
+        hardware,
+        mqttBridge,
+        blockId: preset.blockId,
+        action: params.action,
+        params: params.params ?? {},
+      })
+    },
+  }))
+}
+
 const listBlocksSchema = Type.Object({
   status_filter: Type.Optional(
     Type.Union([Type.Literal('online'), Type.Literal('offline'), Type.Literal('all')], {
@@ -255,79 +448,13 @@ function createControlActuatorTool(
     ],
     parameters: controlActuatorSchema,
     async execute(_id: string, params: ControlActuatorParams) {
-      const block = hardware.getBlock(params.block_id)
-
-      if (!block) {
-        return {
-          content: [{ type: 'text', text: `Error: block "${params.block_id}" not found.` }],
-          details: undefined,
-          isError: true,
-        }
-      }
-
-      if (block.status === 'offline') {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error: actuator "${params.block_id}" is offline and cannot be controlled.`,
-            },
-          ],
-          details: undefined,
-          isError: true,
-        }
-      }
-
-      if (block.type !== 'actuator') {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error: "${params.block_id}" is not an actuator (type: ${block.type}).`,
-            },
-          ],
-          details: undefined,
-          isError: true,
-        }
-      }
-
-      const next = hardware.controlActuator(params.block_id, params.action, params.params ?? {})
-      const commandResult = mqttBridge
-        ? await mqttBridge.publishActuatorCommand(
-            params.block_id,
-            params.action,
-            params.params ?? {},
-          )
-        : null
-      const publishSummary = mqttBridge
-        ? commandResult
-          ? [
-              `MQTT topic: ${commandResult.topic}`,
-              `MQTT payload: ${commandResult.payload}`,
-              ...(commandResult.compatibilityTopics?.length
-                ? [`MQTT compatibility topics: ${commandResult.compatibilityTopics.join(', ')}`]
-                : []),
-            ]
-          : ['MQTT publish: not sent for this action mapping']
-        : ['MQTT publish: disabled (local state only)']
-      const stateStr = JSON.stringify(next?.state ?? {}, null, 2)
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: [
-              `Command handled for ${hardware.getNodeLabel(params.block_id)} (${params.block_id}, ${block.capability}): ${params.action}`,
-              `Parameters: ${JSON.stringify(params.params ?? {})}`,
-              ...publishSummary,
-              '',
-              'Current actuator state:',
-              stateStr,
-            ].join('\n'),
-          },
-        ],
-        details: undefined,
-      }
+      return executeActuatorCommand({
+        action: params.action,
+        blockId: params.block_id,
+        hardware,
+        mqttBridge,
+        params: params.params ?? {},
+      })
     },
   }
 }
@@ -409,6 +536,7 @@ export function createHardwareTools(
   mqttBridge: AihubMqttBridge | null,
 ): ToolDefinition<any, any, any>[] {
   const tools: ToolDefinition<any, any, any>[] = [
+    ...createPresetActuatorTools(hardware, mqttBridge),
     createListBlocksTool(hardware),
     createGetSensorDataTool(hardware),
     createGetCameraSnapshotTool(hardware),

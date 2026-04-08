@@ -65,47 +65,45 @@ interface HardwareStoreOptions {
 function parseNodeMetaMap(raw: string | undefined): Record<string, string> {
   if (!raw) return {}
 
-  const trimmed = raw.trim()
-  if (!trimmed) return {}
+  const normalize = (value: string): string => value.trim().replace(/^['"]|['"]$/g, '')
+
+  const fromPairs = (input: string): Record<string, string> => {
+    const map: Record<string, string> = {}
+    const chunks = input
+      .split(/\r?\n|,/)
+      .map((item) => item.trim())
+      .filter(Boolean)
+
+    for (const chunk of chunks) {
+      const idx = chunk.indexOf(':')
+      if (idx <= 0) continue
+      const key = normalize(chunk.slice(0, idx))
+      const value = normalize(chunk.slice(idx + 1))
+      if (key && value) {
+        map[key] = value
+      }
+    }
+
+    return map
+  }
 
   try {
-    const parsed = JSON.parse(trimmed) as unknown
+    const parsed = JSON.parse(raw) as unknown
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      throw new Error('invalid meta json')
+      return fromPairs(raw)
     }
 
     const entries = Object.entries(parsed)
     const map: Record<string, string> = {}
     for (const [key, value] of entries) {
       if (typeof value === 'string') {
-        map[key] = value
+        map[normalize(key)] = normalize(value)
       }
     }
     return map
   } catch {
-    const map: Record<string, string> = {}
-    for (const token of trimmed.split(',')) {
-      const pair = token.trim()
-      if (!pair) continue
-      const separatorIndex = pair.indexOf(':')
-      if (separatorIndex <= 0) continue
-      const key = pair.slice(0, separatorIndex).trim()
-      const value = pair.slice(separatorIndex + 1).trim()
-      if (key && value) {
-        map[key] = value
-      }
-    }
-    return map
+    return fromPairs(raw)
   }
-}
-
-function parseNodeAllowlist(raw: string | undefined): Set<string> | null {
-  if (!raw) return null
-  const ids = raw
-    .split(',')
-    .map((id) => id.trim())
-    .filter(Boolean)
-  return ids.length > 0 ? new Set(ids) : null
 }
 
 function cloneActuatorState(state: ActuatorState): ActuatorState {
@@ -150,16 +148,20 @@ export class HardwareStore {
   private blocks = new Map<string, BlockSnapshot>()
   private cameraScenes = new Map<string, string>()
   private listeners = new Set<Listener>()
-  private readonly nodeAllowlist: Set<string> | null
   private readonly nodeDescriptions: Record<string, string>
   private readonly nodeLabels: Record<string, string>
   private sensorReadings = new Map<string, Record<string, unknown>>()
 
   constructor(options: HardwareStoreOptions = {}) {
     const { seedMockBlocks = true } = options
-    this.nodeAllowlist = parseNodeAllowlist(process.env.HARDWARE_NODE_ALLOWLIST)
-    this.nodeLabels = parseNodeMetaMap(process.env.HARDWARE_NODE_LABELS)
-    this.nodeDescriptions = parseNodeMetaMap(process.env.HARDWARE_NODE_DESCRIPTIONS)
+    this.nodeLabels = parseNodeMetaMap(
+      process.env.HARDWARE_NODE_LABELS ??
+        process.env.HARDWARE_NODE_NAMES ??
+        process.env.HARDWARE_NODE_FRIENDLY_NAMES,
+    )
+    this.nodeDescriptions = parseNodeMetaMap(
+      process.env.HARDWARE_NODE_DESCRIPTIONS ?? process.env.HARDWARE_NODE_DESC,
+    )
 
     if (seedMockBlocks) {
       for (const block of BLOCKS) {
@@ -205,14 +207,12 @@ export class HardwareStore {
   }
 
   getSnapshot(): HardwareSnapshot {
-    const blocks = [...this.blocks.values()]
-      .filter((block) => this.isNodeAllowed(block.block_id))
-      .map((block) => ({
-        ...block,
-        latest: this.sensorReadings.get(block.block_id),
-        actuator: this.getActuatorStateForBlock(block.block_id),
-        scene: this.cameraScenes.get(block.block_id),
-      }))
+    const blocks = [...this.blocks.values()].map((block) => ({
+      ...block,
+      latest: this.sensorReadings.get(block.block_id),
+      actuator: this.getActuatorStateForBlock(block.block_id),
+      scene: this.cameraScenes.get(block.block_id),
+    }))
 
     const metricSource = blocks
       .map((block) => block.latest)
@@ -334,12 +334,6 @@ export class HardwareStore {
   applyMessage(message: HardwareIngressMessage): { ok: boolean; error?: string; ackId: string } {
     const ackId = randomUUID()
 
-    const incomingBlockId =
-      message.type === 'announce' ? message.block.block_id : message.block_id
-    if (!this.isNodeAllowed(incomingBlockId)) {
-      return { ok: true, ackId }
-    }
-
     switch (message.type) {
       case 'announce': {
         const existing = this.blocks.get(message.block.block_id)
@@ -424,11 +418,6 @@ export class HardwareStore {
     }
 
     return undefined
-  }
-
-  private isNodeAllowed(blockId: string): boolean {
-    if (!this.nodeAllowlist) return true
-    return this.nodeAllowlist.has(blockId)
   }
 
   private broadcast(event: HardwareBroadcast): void {
