@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { flushSync } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { toPng } from "html-to-image";
 import { useI18n, type Locale } from "@/lib/i18n";
@@ -178,10 +179,11 @@ export function ContextMachine() {
   const [generating, setGenerating] = useState(false);
   const [cardImage, setCardImage] = useState<string | null>(null);
   const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
   const [posted, setPosted] = useState(false);
 
   // Snapshot of card state at generation time (so post matches the image)
-  const [cardSnapshot, setCardSnapshot] = useState<{ username: string; sensors: SensorId[]; easterEggs: string[]; vibe: Vibe } | null>(null);
+  const [cardSnapshot, setCardSnapshot] = useState<{ username: string; sensors: SensorId[]; easterEggs: string[]; vibe: Vibe; message: string } | null>(null);
 
   // Random seed for card style — changes on each generate
   const [cardSeed, setCardSeed] = useState(0);
@@ -235,12 +237,14 @@ export function ContextMachine() {
   /* -- Generate -- */
   async function generateCard() {
     if (!cardRef.current || active.length === 0) return;
-    setCardSeed(Math.random()); // randomize style
-    setGenerating(true);
-    // Snapshot current state so post metadata matches the generated image
-    setCardSnapshot({ username: username || "Anonymous", sensors: [...active], easterEggs: [...unlockedTexts], vibe: selectedVibe });
-    // Wait for React to flush the re-render (seed + latest username)
-    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100))));
+    // Force React to commit all state changes to DOM synchronously
+    flushSync(() => {
+      setCardSeed(Math.random());
+      setGenerating(true);
+      setCardSnapshot({ username: username || "Anonymous", sensors: [...active], easterEggs: [...unlockedTexts], vibe: selectedVibe, message });
+    });
+    // One extra frame for browser paint
+    await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 50)));
     try {
       const png = await toPng(cardRef.current, { pixelRatio: 2, backgroundColor: "#000" });
       setCardImage(png);
@@ -259,7 +263,7 @@ export function ContextMachine() {
       const res = await fetch(`${serverUrl}/v1/gallery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: cardSnapshot.username, email: email || undefined, sensors: cardSnapshot.sensors, easterEggs: cardSnapshot.easterEggs, imageBase64: cardImage }),
+        body: JSON.stringify({ username: cardSnapshot.username, email: email || undefined, message: cardSnapshot.message || undefined, sensors: cardSnapshot.sensors, easterEggs: cardSnapshot.easterEggs, imageBase64: cardImage }),
       });
       if (res.ok) {
         setPosted(true);
@@ -312,6 +316,12 @@ export function ContextMachine() {
             className="flex-1 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-center outline-none focus:border-black/30 transition-colors"
           />
         </div>
+        <input
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder={locale === "zh" ? "自由留下你的想法～" : "Leave your thoughts here~"}
+          className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-center outline-none focus:border-black/30 transition-colors"
+        />
         {/* Vibe selector */}
         <div className="text-center">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-black/35 block mb-2">
@@ -443,7 +453,7 @@ export function ContextMachine() {
             >
               <div style={{ position: "absolute", inset: 0, backgroundImage: cardPattern, pointerEvents: "none" }} />
               <div style={{ position: "relative" }}>
-                <CardContent username={username} active={active} unlockedTexts={unlockedTexts} sensorName={sensorName} vibeLabel={vibeLabel} vibeEmoji={VIBE_EMOJI[selectedVibe]} cm={cm} />
+                <CardContent username={username} message={message} active={active} unlockedTexts={unlockedTexts} sensorName={sensorName} vibeLabel={vibeLabel} vibeEmoji={VIBE_EMOJI[selectedVibe]} cm={cm} />
               </div>
             </div>
           </div>
@@ -504,9 +514,9 @@ export function ContextMachine() {
 /* ------------------------------------------------------------------ */
 
 function CardContent({
-  username, active, unlockedTexts, sensorName, vibeLabel, vibeEmoji, cm,
+  username, message, active, unlockedTexts, sensorName, vibeLabel, vibeEmoji, cm,
 }: {
-  username: string; active: SensorId[]; unlockedTexts: string[];
+  username: string; message?: string; active: SensorId[]; unlockedTexts: string[];
   sensorName: (id: string) => string; vibeLabel: string; vibeEmoji: string;
   cm: Record<string, any>;
 }) {
@@ -518,6 +528,9 @@ function CardContent({
       </div>
 
       <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: "-0.02em", marginBottom: 6 }}>{username || "Anonymous"}</div>
+      {message && (
+        <div style={{ fontSize: 13, color: "rgba(255,255,255,0.6)", marginBottom: 12, fontStyle: "italic" }}>"{message}"</div>
+      )}
 
       {/* Vibe badge */}
       <div style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 10px", borderRadius: 20, background: "rgba(255,255,255,0.08)", fontSize: 11, marginBottom: 16, whiteSpace: "nowrap" }}>
@@ -562,6 +575,7 @@ function CardContent({
 interface GalleryItem {
   id: number;
   username: string;
+  message?: string;
   sensors: string[];
   easterEggs: string[];
   createdAt: string;
@@ -624,6 +638,7 @@ export function GalleryMarquee() {
             />
             <div className="px-3 py-2">
               <p className="text-xs font-medium">{item.username}</p>
+              {item.message && <p className="text-[11px] text-black/50 italic">"{item.message}"</p>}
               <p className="text-[10px] text-black/40">
                 {item.sensors.map((s: string) => sensorName(s)).join(" · ")}
               </p>

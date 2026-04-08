@@ -6,7 +6,6 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { useI18n } from "@/lib/i18n";
 import { MagneticButton } from "./MagneticButton";
-import { IsometricRoom } from "./IsometricRoom";
 import { SpotlightCard } from "./SpotlightCard";
 
 const ContextMachineInline = dynamic(
@@ -157,7 +156,7 @@ export function Landing() {
       {/* Gallery marquee — community cards */}
       <GalleryMarquee />
 
-      {/* Smart Space — 3D Room center, modules + scenes orbiting */}
+      {/* Smart Space — modules + scenes */}
       <section className="relative mx-auto max-w-7xl px-6 pb-28 lg:px-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -174,155 +173,51 @@ export function Landing() {
           </h2>
         </motion.div>
 
-        {/* Desktop: 3D room center with orbiting modules + scenes */}
-        <div className="hidden lg:block">
-          <div className="relative mx-auto" style={{ maxWidth: 1100, height: 700 }}>
-            {/* Center — 3D Room */}
+        {/* Module images row */}
+        <div className="mb-10 flex flex-wrap justify-center gap-4">
+          {moduleImages.map((mod, i) => (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
+              key={mod.src}
+              initial={{ opacity: 0, scale: 0.5 }}
               whileInView={{ opacity: 1, scale: 1 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.8 }}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-10"
-              style={{ width: 420 }}
+              transition={{ delay: 0.1 + i * 0.06, duration: 0.5 }}
             >
-              <IsometricRoom />
+              <motion.div
+                className="drop-shadow-md"
+                animate={{ y: [0, -6, 0, 4, 0], rotate: [-2, 2, -1, 1, -2] }}
+                transition={{ duration: 4 + i * 0.7, repeat: Infinity, ease: "easeInOut" }}
+                whileHover={{ scale: 1.15 }}
+              >
+                <Image src={mod.src} alt={mod.alt} width={64} height={64} className="h-auto w-16" />
+              </motion.div>
             </motion.div>
-
-            {/* Orbiting scene images — 5 scenes around the room */}
-            {t.scenes.items.slice(0, 5).map((s, i) => {
-              const positions = [
-                { top: '0%', left: '0%' },      /* top-left: cooking */
-                { top: '2%', right: '0%' },      /* top-right: bathing */
-                { top: '50%', left: '-2%' },     /* mid-left: baby */
-                { top: '48%', right: '-1%' },    /* mid-right: mood */
-                { bottom: '0%', left: '30%' },   /* bottom-center: sleeping */
-              ];
-              const pos = positions[i];
-              return (
-                <motion.div
-                  key={s.src}
-                  initial={{ opacity: 0, scale: 0.85 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.2 + i * 0.1, duration: 0.6 }}
-                  className="absolute z-20 group"
-                  style={{ width: 220, ...pos }}
-                >
-                  <div className="overflow-hidden rounded-2xl border border-black/8 bg-white/90 backdrop-blur-sm shadow-md transition-all duration-300 hover:border-black/20 hover:shadow-lg">
-                    <div className="relative aspect-[4/3] overflow-hidden">
-                      <Image
-                        src={s.src}
-                        alt={s.alt}
-                        fill
-                        sizes="220px"
-                        className="object-cover transition-transform duration-500 group-hover:scale-105"
-                      />
-                    </div>
-                    <p className="px-3 py-2 text-[11px] leading-relaxed text-black/45">{s.alt}</p>
-                  </div>
-                </motion.div>
-              );
-            })}
-
-            {/* Floating module images scattered around */}
-            {moduleImages.map((mod, i) => {
-              const chipPositions = [
-                { top: '6%', left: '36%' },
-                { top: '4%', right: '26%' },
-                { top: '32%', left: '6%' },
-                { top: '34%', right: '4%' },
-                { bottom: '22%', left: '8%' },
-                { bottom: '6%', right: '28%' },
-              ];
-              const pos = chipPositions[i];
-              return (
-                <motion.div
-                  key={mod.src}
-                  initial={{ opacity: 0, scale: 0.5 }}
-                  whileInView={{ opacity: 1, scale: 1 }}
-                  viewport={{ once: true }}
-                  transition={{ delay: 0.3 + i * 0.08, duration: 0.5 }}
-                  className="absolute z-30"
-                  style={{ width: 64, ...pos }}
-                >
-                  <motion.div
-                    className="drop-shadow-md"
-                    animate={{
-                      y: [0, -6, 0, 4, 0],
-                      rotate: [-2, 2, -1, 1, -2],
-                    }}
-                    transition={{
-                      duration: 4 + i * 0.7,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                    whileHover={{ scale: 1.15 }}
-                  >
-                    <Image
-                      src={mod.src}
-                      alt={mod.alt}
-                      width={64}
-                      height={64}
-                      className="h-auto w-full"
-                    />
-                  </motion.div>
-                </motion.div>
-              );
-            })}
-          </div>
+          ))}
         </div>
 
-        {/* Mobile/tablet fallback */}
-        <div className="lg:hidden">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.7 }}
-            className="mb-8"
-          >
-            <IsometricRoom />
-          </motion.div>
-
-          {/* Module images row */}
-          <div className="mb-6 flex flex-wrap justify-center gap-3">
-            {moduleImages.map((mod) => (
-              <Image
-                key={mod.src}
-                src={mod.src}
-                alt={mod.alt}
-                width={48}
-                height={48}
-                className="h-auto w-12 drop-shadow-md"
-              />
-            ))}
-          </div>
-
-          {/* Scene grid */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {t.scenes.items.slice(0, 5).map((s, i) => (
-              <motion.div
-                key={s.src}
-                initial={{ opacity: 0, y: 12 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.06, duration: 0.5 }}
-                className="group overflow-hidden rounded-xl border border-black/8 bg-black/[0.02] transition-colors duration-300 hover:border-black/20"
-              >
-                <div className="relative aspect-[4/3] overflow-hidden">
-                  <Image
-                    src={s.src}
-                    alt={s.alt}
-                    fill
-                    sizes="(max-width: 640px) 50vw, 33vw"
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  />
-                </div>
-                <p className="px-2 py-1.5 text-[10px] leading-relaxed text-black/45">{s.alt}</p>
-              </motion.div>
-            ))}
-          </div>
+        {/* Scene grid */}
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          {t.scenes.items.slice(0, 5).map((s, i) => (
+            <motion.div
+              key={s.src}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.06, duration: 0.5 }}
+              className="group overflow-hidden rounded-xl border border-black/8 bg-black/[0.02] transition-colors duration-300 hover:border-black/20"
+            >
+              <div className="relative aspect-[4/3] overflow-hidden">
+                <Image
+                  src={s.src}
+                  alt={s.alt}
+                  fill
+                  sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 20vw"
+                  className="object-cover transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+              <p className="px-2 py-1.5 text-[10px] leading-relaxed text-black/45">{s.alt}</p>
+            </motion.div>
+          ))}
         </div>
       </section>
 

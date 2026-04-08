@@ -29,6 +29,8 @@ const history = new SupabaseHistoryService()
 const galleryDb = new Database(join(paths.memoryDir, 'gallery.sqlite'))
 galleryDb.run('CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
 galleryDb.run('CREATE TABLE IF NOT EXISTS gallery (id INTEGER PRIMARY KEY, username TEXT, sensors TEXT, easter_eggs TEXT, image TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
+// Add message column if missing (safe migration)
+try { galleryDb.run('ALTER TABLE gallery ADD COLUMN message TEXT DEFAULT \'\'') } catch { /* column already exists */ }
 const hardwareEvents = new HardwareEventService()
 const mqttBridge = new AihubMqttBridge({
   eventService: hardwareEvents,
@@ -439,17 +441,18 @@ app.post('/v1/gallery', async (c) => {
   const body = (await c.req.json()) as {
     username?: string
     email?: string
+    message?: string
     sensors?: string[]
     easterEggs?: string[]
     imageBase64?: string
   }
-  const { username, email, sensors, easterEggs, imageBase64 } = body
+  const { username, email, message, sensors, easterEggs, imageBase64 } = body
   if (!username) {
     return c.json({ error: 'username is required' }, 400)
   }
   const result = galleryDb.run(
-    'INSERT INTO gallery (username, sensors, easter_eggs, image) VALUES (?, ?, ?, ?)',
-    [username, JSON.stringify(sensors ?? []), JSON.stringify(easterEggs ?? []), imageBase64 ?? ''],
+    'INSERT INTO gallery (username, message, sensors, easter_eggs, image) VALUES (?, ?, ?, ?, ?)',
+    [username, message ?? '', JSON.stringify(sensors ?? []), JSON.stringify(easterEggs ?? []), imageBase64 ?? ''],
   )
   // Auto-add email to waitlist if provided
   if (email?.trim()) {
@@ -465,9 +468,10 @@ app.get('/v1/gallery', (c) => {
   const offset = Math.max(Number(c.req.query('offset') || 0), 0)
 
   const total = (galleryDb.query('SELECT COUNT(*) as count FROM gallery').get() as { count: number }).count
-  const rows = galleryDb.query('SELECT id, username, sensors, easter_eggs, created_at FROM gallery ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset) as {
+  const rows = galleryDb.query('SELECT id, username, message, sensors, easter_eggs, created_at FROM gallery ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset) as {
     id: number
     username: string
+    message: string
     sensors: string
     easter_eggs: string
     created_at: string
@@ -476,6 +480,7 @@ app.get('/v1/gallery', (c) => {
   const items = rows.map((row) => ({
     id: row.id,
     username: row.username,
+    message: row.message || undefined,
     sensors: JSON.parse(row.sensors) as string[],
     easterEggs: JSON.parse(row.easter_eggs) as string[],
     createdAt: row.created_at,
