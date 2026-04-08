@@ -80,6 +80,7 @@ export class SupabaseHistoryService {
   getStatus() {
     return {
       enabled: this.enabled,
+      mode: 'mock',
       persistIntervalMs: this.persistIntervalMs,
       tableName: this.tableName,
     }

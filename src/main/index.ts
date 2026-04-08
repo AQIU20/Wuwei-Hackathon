@@ -4,6 +4,7 @@ import { Hono } from 'hono'
 import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import { AgentRuntime } from './agent'
+import { isMockHardwareMode, resolveHardwareMode } from './hardware/mode'
 import { HardwareStore, type HardwareIngressMessage } from './hardware/store'
 import { SupabaseHistoryService } from './history/supabase-history-service'
 import { PreferenceMemoryService } from './memory/preference-memory-service'
@@ -17,9 +18,11 @@ configService.init()
 
 const registry = new ProviderRegistry(configService)
 const memoryService = new PreferenceMemoryService(join(paths.memoryDir, 'preferences.sqlite'))
+const hardwareMode = resolveHardwareMode()
+const mockHardwareMode = isMockHardwareMode(hardwareMode)
 const hardware = new HardwareStore()
-const history = new SupabaseHistoryService()
-const stopSimulation = hardware.startSimulation()
+const history = mockHardwareMode ? new SupabaseHistoryService() : null
+const stopSimulation = mockHardwareMode ? hardware.startSimulation() : null
 const sessions = new Map<string, AgentRuntime>()
 type WebSocketConnection = { send: (data: string) => void }
 const BunRuntime = globalThis as unknown as {
@@ -48,7 +51,12 @@ function createRuntime(): AgentRuntime {
 }
 
 hardware.subscribe((event) => {
-  if ((event.type === 'snapshot' || event.type === 'update') && history.isEnabled()) {
+  if (
+    mockHardwareMode &&
+    history &&
+    (event.type === 'snapshot' || event.type === 'update') &&
+    history.isEnabled()
+  ) {
     void history.persistSnapshot(event.payload, event.type).catch((error) => {
       console.error('[history] persist snapshot failed:', error)
     })
@@ -101,7 +109,8 @@ app.get('/ready', (c) => {
     {
       activeModel,
       configuredProviders: configuredProviders.map((provider) => provider.id),
-      history: history.getStatus(),
+      hardwareMode,
+      history: history?.getStatus() ?? { enabled: false, mode: hardwareMode, tableName: null },
       ok: isReady,
       workspace: paths.cwd,
     },
@@ -121,7 +130,7 @@ app.get('/v1/blocks/:blockId', (c) => {
 })
 
 app.get('/v1/blocks/:blockId/history', async (c) => {
-  if (!history.isEnabled()) {
+  if (!history?.isEnabled()) {
     return c.json({ error: 'Supabase history is not configured' }, 503)
   }
 
@@ -151,7 +160,7 @@ app.get('/v1/blocks/:blockId/history', async (c) => {
 })
 
 app.get('/v1/history', async (c) => {
-  if (!history.isEnabled()) {
+  if (!history?.isEnabled()) {
     return c.json({ error: 'Supabase history is not configured' }, 503)
   }
 
@@ -353,10 +362,11 @@ const server = BunRuntime.Bun.serve({
 console.log(`[server] Unforce Make agent server listening on http://localhost:${port}`)
 console.log(`[server] Workspace cwd: ${paths.cwd}`)
 console.log(`[server] Data dir: ${paths.dataDir}`)
-console.log(`[server] Supabase history: ${history.isEnabled() ? 'enabled' : 'disabled'}`)
+console.log(`[server] Hardware mode: ${hardwareMode}`)
+console.log(`[server] Supabase history: ${history?.isEnabled() ? 'enabled (mock)' : 'disabled'}`)
 
 function shutdown(): void {
-  stopSimulation()
+  stopSimulation?.()
   for (const runtime of sessions.values()) {
     runtime.destroy()
   }
