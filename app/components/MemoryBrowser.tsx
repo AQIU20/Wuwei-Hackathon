@@ -52,6 +52,69 @@ const MEMORY_LABELS: Record<string, { zh: string; en: string }> = {
   health_pattern: { zh: "健康规律", en: "Health pattern" },
 };
 
+const DEMO_MEMORIES: AgentMemory[] = [
+  {
+    id: "demo-sleep",
+    home_id: "demo-home",
+    memory_type: "pattern",
+    memory_key: "sleep_schedule",
+    memory_value:
+      "工作日通常在 00:30 到 01:10 之间入睡，早上 8 点前后起床。连续熬夜两天后，第二天下午心率会偏高。",
+    confidence: 0.92,
+    evidence_count: 18,
+    last_observed_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    reason: "过去两周内，睡眠与心率数据反复出现相同模式。",
+    status: "active",
+    created_at: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 40 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "demo-light",
+    home_id: "demo-home",
+    memory_type: "preference",
+    memory_key: "lighting_preference",
+    memory_value:
+      "晚上阅读时更喜欢暖白低亮度灯光，接近 22:30 会把灯切到更暗的 sunset 模式。",
+    confidence: 0.88,
+    evidence_count: 14,
+    last_observed_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    reason: "在阅读场景下，多次主动把灯光从冷白调回暖白。",
+    status: "active",
+    created_at: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 90 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "demo-health",
+    home_id: "demo-home",
+    memory_type: "health",
+    memory_key: "health_pattern",
+    memory_value:
+      "湿度超过 70% 且甲醛轻微升高时，更容易出现心率偏快和烦躁，适合提前通风。",
+    confidence: 0.84,
+    evidence_count: 11,
+    last_observed_at: new Date(Date.now() - 26 * 60 * 60 * 1000).toISOString(),
+    reason: "环境与体征记录里有稳定相关性，但仍需要更多样本。",
+    status: "active",
+    created_at: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString(),
+  },
+  {
+    id: "demo-routine",
+    home_id: "demo-home",
+    memory_type: "pattern",
+    memory_key: "desk_focus_routine",
+    memory_value:
+      "坐到书桌前超过 15 分钟后，通常会开启专注模式，并希望姿态提醒更积极一些。",
+    confidence: 0.79,
+    evidence_count: 9,
+    last_observed_at: new Date(Date.now() - 8 * 60 * 60 * 1000).toISOString(),
+    reason: "对话请求和姿态模块触发记录在相近时间窗口内重复出现。",
+    status: "active",
+    created_at: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    updated_at: new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString(),
+  },
+];
+
 function relativeTime(iso: string, locale: Locale): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);
@@ -124,6 +187,7 @@ export function MemoryBrowser() {
   const [editReason, setEditReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [usingDemoData, setUsingDemoData] = useState(false);
 
   async function readErrorMessage(res: Response) {
     try {
@@ -138,20 +202,29 @@ export function MemoryBrowser() {
     setLoading(true);
     setError(null);
     setUnavailable(false);
+    setUsingDemoData(false);
 
     try {
       const res = await fetch(`${SERVER}/v1/memories`);
       if (res.status === 503) {
         setUnavailable(true);
-        setItems([]);
+        setItems(DEMO_MEMORIES);
+        setUsingDemoData(true);
         return;
       }
       if (!res.ok) throw new Error(await readErrorMessage(res));
 
       const data = (await res.json()) as { items: AgentMemory[] };
+      if (data.items.length === 0) {
+        setItems(DEMO_MEMORIES);
+        setUsingDemoData(true);
+        return;
+      }
       setItems(data.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load memories");
+      setItems(DEMO_MEMORIES);
+      setUsingDemoData(true);
     } finally {
       setLoading(false);
     }
@@ -162,6 +235,7 @@ export function MemoryBrowser() {
   }, []);
 
   async function save(id: string) {
+    if (usingDemoData) return;
     const value = editValue.trim();
     if (!value) return;
 
@@ -187,6 +261,7 @@ export function MemoryBrowser() {
   }
 
   async function remove(id: string) {
+    if (usingDemoData) return;
     setDeletingId(id);
     try {
       const res = await fetch(`${SERVER}/v1/memories/${id}`, {
@@ -211,21 +286,6 @@ export function MemoryBrowser() {
   ).length;
   const strongCount = items.filter((item) => item.confidence >= 0.8).length;
 
-  if (unavailable) {
-    return (
-      <SpotlightCard className="py-20 text-center">
-        <p className="font-display text-xl text-white/80">
-          {zh ? "记忆服务暂不可用" : "Memory service unavailable"}
-        </p>
-        <p className="mt-2 text-sm text-white/45">
-          {zh
-            ? "当前后端还没有连上 `agent_memories`，所以这里暂时拿不到 AI 整理出的长期记忆。"
-            : "The backend is not connected to `agent_memories` yet, so long-term memory is not available here."}
-        </p>
-      </SpotlightCard>
-    );
-  }
-
   return (
     <section className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -241,6 +301,13 @@ export function MemoryBrowser() {
               ? "AI 会把反复观察到的规律整理成长期记忆。你可以在这里看到它学到的睡眠时间、灯光偏好、健康规律和其他稳定习惯。"
               : "The agent condenses repeated observations into durable memories. Review what it has learned about sleep, lighting, health, and other stable routines."}
           </p>
+          {usingDemoData && (
+            <p className="mt-3 inline-flex rounded-full border border-[color:var(--accent-1)]/30 bg-[color:var(--accent-1)]/10 px-3 py-1 font-mono text-[10px] uppercase tracking-[0.18em] text-[color:var(--accent-1)]">
+              {zh
+                ? "当前展示的是演示记忆数据"
+                : "Showing demo memory data"}
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap gap-2">
@@ -415,19 +482,21 @@ export function MemoryBrowser() {
                           <MagneticButton
                             type="button"
                             onClick={() => {
+                              if (usingDemoData) return;
                               setEditId(memory.id);
                               setEditValue(memory.memory_value);
                               setEditReason(memory.reason ?? "");
                             }}
                             variant="ghost"
                             className="!px-4 !py-2 text-xs"
+                            disabled={usingDemoData}
                           >
                             {zh ? "编辑记忆" : "Edit memory"}
                           </MagneticButton>
                           <button
                             type="button"
                             onClick={() => void remove(memory.id)}
-                            disabled={isDeleting}
+                            disabled={isDeleting || usingDemoData}
                             className="rounded-full border border-white/10 px-4 py-2 font-mono text-xs uppercase tracking-[0.15em] text-white/50 transition hover:border-red-300/40 hover:text-red-100 disabled:opacity-50"
                           >
                             {isDeleting ? (zh ? "删除中" : "Deleting") : zh ? "删除" : "Delete"}
