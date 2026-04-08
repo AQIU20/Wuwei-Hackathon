@@ -8,16 +8,6 @@ import { useI18n } from "@/lib/i18n";
 import { MagneticButton } from "./MagneticButton";
 import { SpotlightCard } from "./SpotlightCard";
 
-const ContextMachineInline = dynamic(
-  () => import("../context-machine/ContextMachine").then((m) => m.ContextMachine),
-  { ssr: false },
-);
-
-const GalleryMarquee = dynamic(
-  () => import("../context-machine/ContextMachine").then((m) => m.GalleryMarquee),
-  { ssr: false },
-);
-
 const FloatingBlocks = dynamic(
   () => import("./FloatingBlocks").then((m) => m.FloatingBlocks),
   { ssr: false },
@@ -67,7 +57,15 @@ export function Landing() {
           <motion.p
             variants={fadeUp}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-8 max-w-2xl text-lg leading-relaxed text-black/60"
+            className="mt-5 max-w-2xl text-base font-medium tracking-tight text-black/50"
+          >
+            {t.hero.subtitle}
+          </motion.p>
+
+          <motion.p
+            variants={fadeUp}
+            transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+            className="mt-6 max-w-2xl text-lg leading-relaxed text-black/60"
           >
             {t.hero.desc}
           </motion.p>
@@ -93,7 +91,7 @@ export function Landing() {
           <motion.div
             variants={fadeUp}
             transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-            className="mt-16 grid grid-cols-2 gap-8 border-t border-black/10 pt-8 sm:grid-cols-4"
+            className="mt-16 grid grid-cols-3 gap-8 border-t border-black/10 pt-8"
           >
             {t.hero.stats.map((s) => (
               <div key={s.v}>
@@ -148,14 +146,6 @@ export function Landing() {
         </div>
       </section>
 
-      {/* Context Machine — inline interactive section */}
-      <section id="context-machine" className="relative py-16">
-        <ContextMachineInline />
-      </section>
-
-      {/* Gallery marquee — community cards */}
-      <GalleryMarquee />
-
       {/* Smart Space — scattered collage layout */}
       <section className="relative mx-auto max-w-7xl px-6 pb-28 lg:px-10">
         <motion.div
@@ -171,6 +161,9 @@ export function Landing() {
           <h2 className="font-display mt-3 text-[clamp(2rem,4.5vw,3rem)] font-medium leading-[1.05] tracking-[-0.03em] text-gray-900">
             {t.scenes.title}
           </h2>
+          {t.scenes.lead && (
+            <p className="mt-4 text-base text-black/50">{t.scenes.lead}</p>
+          )}
         </motion.div>
 
         <SceneCollage scenes={t.scenes.items} />

@@ -20,22 +20,21 @@ export const dict = {
       dev: "Developers",
       docs: "Docs",
       cta: "Try Agent",
-      contextMachine: "Context Machine",
     },
     hero: {
       badge: "Team Unforce Make · Hackathon 2026",
       titleA: "Stack the blocks.",
-      titleB: "The room gets you.",
-      desc: "Modular IoT blocks that magnetically snap together, auto-join Wi-Fi, and build a space that truly understands you.",
+      titleB: "Sense beyond yourself.",
+      subtitle: "A wearable, stackable AI sensor platform — open source, fully yours.",
+      desc: "Too much happens around you that you can't notice — because human senses have limits. We built AI-powered modular blocks you can wear or place anywhere. Snap them together, and let them pay attention for you.",
       primary: "Talk to the room",
       primaryHref: "/agent",
       secondary: "Developer docs",
       secondaryHref: "/dev",
       stats: [
-        { k: "< 3s", v: "plug-and-play" },
-        { k: "8", v: "block types" },
-        { k: "4", v: "protocol lanes" },
-        { k: "100%", v: "runs on-device" },
+        { k: "On you", v: "wearable" },
+        { k: "Around you", v: "spatial" },
+        { k: "Everywhere", v: "always-on" },
       ],
     },
     values: {
@@ -43,18 +42,18 @@ export const dict = {
       cards: [
         {
           icon: "magnet",
-          t: "Zero-config hardware",
-          d: "POGO-pin magnetic connectors carry power and Wi-Fi credentials. A new block goes from box to mesh in under 3 seconds — no app, no pairing.",
+          t: "Sense everything",
+          d: "Temperature, heart rate, air quality, posture, sound, vision — 8 sensor types that snap together magnetically. From body to room, nothing goes unnoticed.",
         },
         {
           icon: "layers",
-          t: "Unified Context",
-          d: "ESP32 sensors speak MQTT, cameras speak UDP, mics speak WebSocket — the Host normalises everything into one Context API that any app or agent can consume.",
+          t: "Everything in one place",
+          d: "All sensors speak different protocols — MQTT, UDP, WebSocket. The Host unifies them into one stream that any app or AI can understand instantly.",
         },
         {
           icon: "brain",
-          t: "Agent-native",
-          d: "A built-in AI Agent fuses sensor data, vision and voice into a single understanding of the room. Just talk — it listens, sees, and acts.",
+          t: "Built for AI agents",
+          d: "One AI that sees, hears, and understands your space — so you don't have to think about it.",
         },
       ],
     },
@@ -80,6 +79,7 @@ export const dict = {
     scenes: {
       eyebrow: "Life with blocks",
       title: "Scenes that just work",
+      lead: "Pick your modules. Build your scene.",
       items: [
         { src: "/scene-smart-cooking.png", alt: "Smart cooking assistant with voice-guided recipe and code" },
         { src: "/scene-bath-voice.png", alt: "Voice assistant for a relaxing bath experience" },
@@ -187,7 +187,7 @@ export const dict = {
       generating: "Generating…",
       easterEggUnlock: "Unlocked",
       card: {
-        title: "Context Card",
+        title: "Moment Card",
         sensors: "Sensors",
         unlocked: "Unlocked",
       },
@@ -234,22 +234,21 @@ export const dict = {
       dev: "开发者",
       docs: "文档",
       cta: "试试 Agent",
-      contextMachine: "语境制造机",
     },
     hero: {
       badge: "无为创造 · 2026 黑客松",
-      titleA: "拼硬件如叠积木，",
-      titleB: "用智能若话知音。",
-      desc: "模块化 IoT 积木，磁吸即插、秒级入网，搭建一个更懂你的空间。",
+      titleA: "拼出你的感官，",
+      titleB: "感知没有边界。",
+      subtitle: "可穿戴、可拼搭的 AI 感知积木平台 —— 开源，完全属于你。",
+      desc: "生活里太多事，你来不及留意——因为你的感知本来就有限。我们做了一套 AI 感知积木，随身戴、随处放，模块自由拼，让它替你把该注意的都注意到。",
       primary: "和房间聊聊",
       primaryHref: "/agent",
       secondary: "开发者文档",
       secondaryHref: "/dev",
       stats: [
-        { k: "< 3 秒", v: "即插即用" },
-        { k: "8", v: "种积木" },
-        { k: "4", v: "条协议通道" },
-        { k: "100%", v: "本地运行" },
+        { k: "随身", v: "可穿戴" },
+        { k: "空间", v: "全覆盖" },
+        { k: "无处不在", v: "始终感知" },
       ],
     },
     values: {
@@ -257,18 +256,18 @@ export const dict = {
       cards: [
         {
           icon: "magnet",
-          t: "零配置硬件",
-          d: "POGO 磁吸连接器同时传递供电和 Wi-Fi 凭证。新积木从拆箱到入网不到 3 秒 —— 不用 app，不用配对。",
+          t: "感知一切",
+          d: "温度、心率、空气质量、姿态、声音、视觉——8 种传感模块，磁吸拼接。从身体到空间，不漏掉任何细节。",
         },
         {
           icon: "layers",
-          t: "统一 Context",
-          d: "传感器走 MQTT，摄像头走 UDP，麦克风走 WebSocket —— Host 把一切归一成一套 Context API，任何应用或 Agent 都能直接用。",
+          t: "一个入口，全部掌握",
+          d: "传感器走 MQTT，摄像头走 UDP，麦克风走 WebSocket——Host 把所有数据统一成一个流，任何应用或 AI 都能直接读取。",
         },
         {
           icon: "brain",
-          t: "原生 Agent",
-          d: "内置 AI Agent 融合传感器、视觉、语音，形成对整个空间的理解。开口就行 —— 它能听、能看、能动。",
+          t: "为 AI 而生",
+          d: "一个 AI，能看、能听、能理解你的空间——你不用操心。",
         },
       ],
     },
@@ -294,6 +293,7 @@ export const dict = {
     scenes: {
       eyebrow: "积木生活",
       title: "开箱即用的场景",
+      lead: "选模块，拼场景。",
       items: [
         { src: "/scene-smart-cooking.png", alt: "智能烹饪助手，语音引导菜谱" },
         { src: "/scene-bath-voice.png", alt: "沐浴语音助手，放松享受" },
