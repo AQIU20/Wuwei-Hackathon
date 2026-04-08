@@ -6,7 +6,7 @@
  */
 export function IsometricRoom() {
   return (
-    <div className="relative mx-auto w-full overflow-hidden rounded-2xl" style={{ maxWidth: 700, height: 500 }}>
+    <div className="relative mx-auto w-full overflow-hidden rounded-2xl" style={{ maxWidth: 500, height: 360 }}>
       <iframe
         src="/3d-room/index.html"
         title="3D Room"

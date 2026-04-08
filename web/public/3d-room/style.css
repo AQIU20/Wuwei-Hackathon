@@ -36,12 +36,7 @@ body {
     display: none;
 }
 .h-lights {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-50%);
-    width: 45vw;
-    height: 45vw;
+    display: none;
 }
 .h-light {
     position: absolute;
@@ -2031,13 +2026,7 @@ body {
     transform: translateZ(0.5vw);
 }
 .mesa-shadow {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    border-radius: 10%;
-    background-color: rgba(25, 25, 25, .95);
-    filter: blur(1vw);
-    transform: translateZ(0);
+    display: none;
 }
 .mesa {
     position: absolute;
