@@ -180,6 +180,9 @@ export function ContextMachine() {
   const [email, setEmail] = useState("");
   const [posted, setPosted] = useState(false);
 
+  // Snapshot of card state at generation time (so post matches the image)
+  const [cardSnapshot, setCardSnapshot] = useState<{ username: string; sensors: SensorId[]; easterEggs: string[]; vibe: Vibe } | null>(null);
+
   // Random seed for card style — changes on each generate
   const [cardSeed, setCardSeed] = useState(0);
 
@@ -234,6 +237,8 @@ export function ContextMachine() {
     if (!cardRef.current || active.length === 0) return;
     setCardSeed(Math.random()); // randomize style
     setGenerating(true);
+    // Snapshot current state so post metadata matches the generated image
+    setCardSnapshot({ username: username || "Anonymous", sensors: [...active], easterEggs: [...unlockedTexts], vibe: selectedVibe });
     // Wait for React to flush the re-render (seed + latest username)
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 100))));
     try {
@@ -248,13 +253,13 @@ export function ContextMachine() {
   /* -- Gallery post (also adds email to waitlist) -- */
   const [posting, setPosting] = useState(false);
   async function postToGallery() {
-    if (!cardImage || posting) return;
+    if (!cardImage || !cardSnapshot || posting) return;
     setPosting(true);
     try {
       const res = await fetch(`${serverUrl}/v1/gallery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username || "Anonymous", email: email || undefined, sensors: active, easterEggs: unlockedTexts, imageBase64: cardImage }),
+        body: JSON.stringify({ username: cardSnapshot.username, email: email || undefined, sensors: cardSnapshot.sensors, easterEggs: cardSnapshot.easterEggs, imageBase64: cardImage }),
       });
       if (res.ok) {
         setPosted(true);
