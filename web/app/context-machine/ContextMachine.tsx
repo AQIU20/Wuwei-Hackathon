@@ -178,7 +178,6 @@ export function ContextMachine() {
   const [generating, setGenerating] = useState(false);
   const [cardImage, setCardImage] = useState<string | null>(null);
   const [email, setEmail] = useState("");
-  const [waitlistStatus, setWaitlistStatus] = useState<"idle" | "ok" | "dup">("idle");
   const [posted, setPosted] = useState(false);
 
   // Random seed for card style — changes on each generate
@@ -244,31 +243,18 @@ export function ContextMachine() {
     setGenerating(false);
   }, [active, username, selectedVibe]);
 
-  /* -- Waitlist -- */
-  async function submitWaitlist() {
-    if (!email) return;
-    try {
-      const res = await fetch(`${serverUrl}/v1/waitlist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
-      });
-      setWaitlistStatus(res.status === 409 ? "dup" : "ok");
-    } catch { /* */ }
-  }
-
-  /* -- Gallery post -- */
+  /* -- Gallery post (also adds email to waitlist) -- */
   async function postToGallery() {
     if (!cardImage) return;
     try {
       const res = await fetch(`${serverUrl}/v1/gallery`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: username || "Anonymous", sensors: active, easterEggs: unlockedTexts, imageBase64: cardImage }),
+        body: JSON.stringify({ username: username || "Anonymous", email: email || undefined, sensors: active, easterEggs: unlockedTexts, imageBase64: cardImage }),
       });
-      setPosted(true);
       if (res.ok) {
         const data = await res.json();
+        setPosted(true);
         window.dispatchEvent(new CustomEvent("gallery-new-item", { detail: { id: data.id, username: username || "Anonymous", sensors: active, easterEggs: unlockedTexts, createdAt: new Date().toISOString() } }));
       }
     } catch { /* */ }
@@ -296,14 +282,23 @@ export function ContextMachine() {
         <p className="mt-2 text-base text-black/50">{cm.subtitle}</p>
       </motion.div>
 
-      {/* Username + Vibe picker */}
+      {/* Username + Email + Vibe picker */}
       <div className="mx-auto mb-8 max-w-lg space-y-4">
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder={cm.usernamePlaceholder}
-          className="w-full rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-center outline-none focus:border-black/30 transition-colors"
-        />
+        <div className="flex gap-2">
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            placeholder={cm.usernamePlaceholder}
+            className="flex-1 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-center outline-none focus:border-black/30 transition-colors"
+          />
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder={cm.waitlist.placeholder}
+            className="flex-1 rounded-xl border border-black/10 bg-white px-4 py-2.5 text-sm text-center outline-none focus:border-black/30 transition-colors"
+          />
+        </div>
         {/* Vibe selector */}
         <div className="text-center">
           <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-black/35 block mb-2">
@@ -461,19 +456,6 @@ export function ContextMachine() {
                   )}
                 </div>
 
-                {/* Waitlist */}
-                <div className="mx-auto max-w-md rounded-2xl border border-black/8 bg-white/60 p-6 backdrop-blur-sm">
-                  <h3 className="font-display text-lg font-semibold">{cm.waitlist.title}</h3>
-                  <p className="mt-1 text-sm text-black/50">{cm.waitlist.desc}</p>
-                  {waitlistStatus === "idle" ? (
-                    <div className="mt-4 flex gap-2">
-                      <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder={cm.waitlist.placeholder} className="flex-1 rounded-xl border border-black/10 px-4 py-2.5 text-sm outline-none focus:border-black/30 transition-colors" onKeyDown={(e) => e.key === "Enter" && submitWaitlist()} />
-                      <button onClick={submitWaitlist} className="rounded-xl bg-black px-5 py-2.5 text-sm font-medium text-white hover:bg-black/80 transition-colors">{cm.waitlist.submit}</button>
-                    </div>
-                  ) : (
-                    <p className="mt-4 text-sm font-medium text-emerald-600">✓ {waitlistStatus === "ok" ? cm.waitlist.success : cm.waitlist.duplicate}</p>
-                  )}
-                </div>
               </motion.div>
             )}
           </AnimatePresence>

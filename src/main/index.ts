@@ -428,11 +428,12 @@ app.post('/v1/waitlist', async (c) => {
 app.post('/v1/gallery', async (c) => {
   const body = (await c.req.json()) as {
     username?: string
+    email?: string
     sensors?: string[]
     easterEggs?: string[]
     imageBase64?: string
   }
-  const { username, sensors, easterEggs, imageBase64 } = body
+  const { username, email, sensors, easterEggs, imageBase64 } = body
   if (!username) {
     return c.json({ error: 'username is required' }, 400)
   }
@@ -440,6 +441,12 @@ app.post('/v1/gallery', async (c) => {
     'INSERT INTO gallery (username, sensors, easter_eggs, image) VALUES (?, ?, ?, ?)',
     [username, JSON.stringify(sensors ?? []), JSON.stringify(easterEggs ?? []), imageBase64 ?? ''],
   )
+  // Auto-add email to waitlist if provided
+  if (email?.trim()) {
+    try {
+      galleryDb.run('INSERT INTO waitlist (email) VALUES (?)', [email.trim()])
+    } catch { /* ignore duplicate */ }
+  }
   return c.json({ ok: true, id: Number(result.lastInsertRowid) })
 })
 
