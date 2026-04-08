@@ -115,6 +115,46 @@ const DEMO_MEMORIES: AgentMemory[] = [
   },
 ];
 
+async function readErrorMessage(res: Response) {
+  try {
+    const data = (await res.json()) as { error?: string };
+    return data.error || `HTTP ${res.status}`;
+  } catch {
+    return `HTTP ${res.status}`;
+  }
+}
+
+async function fetchMemories(): Promise<{
+  items: AgentMemory[];
+  unavailable: boolean;
+  usingDemoData: boolean;
+}> {
+  const res = await fetch(`${SERVER}/v1/memories`);
+  if (res.status === 503) {
+    return {
+      items: DEMO_MEMORIES,
+      unavailable: true,
+      usingDemoData: true,
+    };
+  }
+  if (!res.ok) throw new Error(await readErrorMessage(res));
+
+  const data = (await res.json()) as { items: AgentMemory[] };
+  if (data.items.length === 0) {
+    return {
+      items: DEMO_MEMORIES,
+      unavailable: false,
+      usingDemoData: true,
+    };
+  }
+
+  return {
+    items: data.items,
+    unavailable: false,
+    usingDemoData: false,
+  };
+}
+
 function relativeTime(iso: string, locale: Locale): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60_000);
@@ -189,15 +229,6 @@ export function MemoryBrowser() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [usingDemoData, setUsingDemoData] = useState(false);
 
-  async function readErrorMessage(res: Response) {
-    try {
-      const data = (await res.json()) as { error?: string };
-      return data.error || `HTTP ${res.status}`;
-    } catch {
-      return `HTTP ${res.status}`;
-    }
-  }
-
   async function load() {
     setLoading(true);
     setError(null);
@@ -205,22 +236,10 @@ export function MemoryBrowser() {
     setUsingDemoData(false);
 
     try {
-      const res = await fetch(`${SERVER}/v1/memories`);
-      if (res.status === 503) {
-        setUnavailable(true);
-        setItems(DEMO_MEMORIES);
-        setUsingDemoData(true);
-        return;
-      }
-      if (!res.ok) throw new Error(await readErrorMessage(res));
-
-      const data = (await res.json()) as { items: AgentMemory[] };
-      if (data.items.length === 0) {
-        setItems(DEMO_MEMORIES);
-        setUsingDemoData(true);
-        return;
-      }
-      setItems(data.items);
+      const result = await fetchMemories();
+      setItems(result.items);
+      setUnavailable(result.unavailable);
+      setUsingDemoData(result.usingDemoData);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load memories");
       setItems(DEMO_MEMORIES);
@@ -287,7 +306,7 @@ export function MemoryBrowser() {
   const strongCount = items.filter((item) => item.confidence >= 0.8).length;
 
   return (
-    <section className="space-y-6">
+    <section id="memory-browser" className="space-y-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/40">
@@ -512,5 +531,114 @@ export function MemoryBrowser() {
         </AnimatePresence>
       </div>
     </section>
+  );
+}
+
+export function MemoryPreview() {
+  const { locale } = useI18n();
+  const zh = locale === "zh";
+  const [items, setItems] = useState<AgentMemory[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [usingDemoData, setUsingDemoData] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      setError(null);
+      try {
+        const result = await fetchMemories();
+        if (cancelled) return;
+        setItems(result.items.slice(0, 3));
+        setUsingDemoData(result.usingDemoData);
+      } catch (err) {
+        if (cancelled) return;
+        setItems(DEMO_MEMORIES.slice(0, 3));
+        setUsingDemoData(true);
+        setError(err instanceof Error ? err.message : "Failed to load memories");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return (
+    <SpotlightCard>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-white/40">
+            Memory
+          </p>
+          <p className="mt-2 text-sm leading-6 text-white/65">
+            {zh
+              ? "首屏预览最近提炼出的长期记忆。完整列表在下方。"
+              : "A first-glance preview of the latest distilled memories. Full list is below."}
+          </p>
+        </div>
+        {usingDemoData && (
+          <span className="rounded-full border border-[color:var(--accent-1)]/25 bg-[color:var(--accent-1)]/10 px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--accent-1)]">
+            demo
+          </span>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="mt-4 font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
+          {zh ? "正在整理记忆" : "Loading memories"}
+        </div>
+      ) : (
+        <div className="mt-4 space-y-3">
+          {items.map((memory) => (
+            <div
+              key={memory.id}
+              className="rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-4"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-white/40">
+                    {typeLabel(memory.memory_type, locale)}
+                  </p>
+                  <h3 className="mt-2 font-display text-lg text-white">
+                    {memoryTitle(memory, locale)}
+                  </h3>
+                </div>
+                <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-[color:var(--accent-1)]">
+                  {formatPercent(memory.confidence)}
+                </span>
+              </div>
+              <p className="mt-3 text-sm leading-6 text-white/80">
+                {memory.memory_value}
+              </p>
+            </div>
+          ))}
+
+          {items.length === 0 && (
+            <div className="rounded-2xl border border-white/8 bg-white/[0.025] px-4 py-4 text-sm text-white/55">
+              {zh ? "还没有可展示的记忆" : "No memories to preview yet"}
+            </div>
+          )}
+
+          <a
+            href="#memory-browser"
+            className="inline-flex rounded-full border border-white/10 px-4 py-2 font-mono text-[11px] uppercase tracking-[0.15em] text-white/60 transition hover:border-white/25 hover:text-white"
+          >
+            {zh ? "查看完整记忆" : "View full memory list"}
+          </a>
+
+          {error && (
+            <p className="text-xs leading-5 text-white/35">
+              {zh ? "已回退到演示数据：" : "Fell back to demo data: "} {error}
+            </p>
+          )}
+        </div>
+      )}
+    </SpotlightCard>
   );
 }

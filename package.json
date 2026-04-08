@@ -4,6 +4,7 @@
   "description": "Cloud agent server for Unforce Make, with coding tools and live hardware access.",
   "scripts": {
     "dev": "bun --watch src/main/index.ts",
+    "build": "next build",
     "bridge": "bun run scripts/hardware-bridge.ts",
     "mqtt:test:hello": "bun run scripts/mqtt-hello-publisher.ts",
     "mqtt:test:railway": "bun run scripts/test-mqtt-railway-ingest.ts",

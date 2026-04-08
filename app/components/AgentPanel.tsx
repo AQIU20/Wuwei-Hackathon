@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n";
 import { MagneticButton } from "./MagneticButton";
+import { MemoryPreview } from "./MemoryBrowser";
 import { SpotlightCard } from "./SpotlightCard";
 
 type CapabilityKey =
@@ -180,6 +181,8 @@ export function AgentPanel() {
             ))}
           </ul>
         </SpotlightCard>
+
+        <MemoryPreview />
       </div>
     </div>
   );
