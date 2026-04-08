@@ -499,7 +499,7 @@ app.get('/v1/gallery/:id/image', (c) => {
   return new Response(buffer, {
     headers: {
       'Content-Type': 'image/png',
-      'Cache-Control': 'public, max-age=31536000, immutable',
+      'Cache-Control': 'public, max-age=86400',
     },
   })
 })

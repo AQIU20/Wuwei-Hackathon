@@ -631,7 +631,7 @@ export function GalleryMarquee() {
             style={{ width: 280, animationDelay: `${(i % Math.max(gallery.length, 1)) * -0.4}s` }}
           >
             <img
-              src={`${serverUrl}/v1/gallery/${item.id}/image`}
+              src={`${serverUrl}/v1/gallery/${item.id}/image?v=${encodeURIComponent(item.createdAt)}`}
               alt={item.username}
               className="w-full"
               loading="lazy"
