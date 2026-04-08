@@ -15,7 +15,6 @@ export function Nav() {
   const links = [
     { href: "/", label: t.nav.home },
     { href: "/agent", label: t.nav.agent },
-    { href: "/memory", label: t.nav.memory },
     { href: "/dev", label: t.nav.dev },
     { href: "/dev/docs", label: t.nav.docs },
   ];
