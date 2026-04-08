@@ -234,8 +234,8 @@ export function ContextMachine() {
     if (!cardRef.current || active.length === 0) return;
     setCardSeed(Math.random()); // randomize style
     setGenerating(true);
-    // Wait a tick for seed-based styles to render
-    await new Promise((r) => setTimeout(r, 50));
+    // Wait for React to flush the re-render (seed + latest username)
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(r, 80))));
     try {
       const png = await toPng(cardRef.current, { pixelRatio: 2, backgroundColor: "#000" });
       setCardImage(png);
