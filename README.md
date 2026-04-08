@@ -8,8 +8,8 @@ Modular IoT blocks that magnetically snap together, auto-join Wi-Fi, and let a c
 
 ```text
 .
+├── app/               # Next.js app router frontend
 ├── src/main/          # Bun + Hono agent server
-├── web/               # Next.js website
 ├── scripts/           # Local utility scripts
 └── idea/              # Notes and planning docs
 ```
@@ -37,20 +37,17 @@ Server endpoints:
 - `POST /v1/chat/sessions`
 - `POST /v1/chat/sessions/:sessionId/messages`
 
-### Website
+### Frontend
 
 ```bash
-cd web
 bun install
-cp .env.example .env.local
 NEXT_PUBLIC_AGENT_SERVER_URL=http://localhost:8787 bun run dev
 ```
 
 ## Railway Deployment
 
-Deploy this repo as two Railway services:
+Deploy the agent server from this repo as a Railway service:
 - `agent-server`
-- `web`
 
 ### 1. Agent Server Service
 
@@ -94,21 +91,6 @@ Deploy check:
 - `GET https://<agent-domain>/v1/hardware-events?limit=5` should return MQTT raw event rows after broker messages start flowing
 - `GET https://<agent-domain>/v1/blocks/heart_01/history?minutes=60&limit=10` should return recent rows for that block
 
-### 2. Web Service
-
-Service settings:
-- Root Directory: `web`
-- Builder: Dockerfile
-- Dockerfile Path: `Dockerfile`
-
-Environment variables:
-- `NEXT_PUBLIC_AGENT_SERVER_URL=https://<your-agent-domain>`
-
-Deploy check:
-- Open `/agent`
-- Confirm the right panel shows live hardware data from the server WebSocket
-- Send a prompt and confirm streamed tool calls and assistant text render correctly
-
 ## Notes
 
 - The agent server is now the single runtime for both coding tools and hardware tools.
@@ -117,7 +99,6 @@ Deploy check:
 - Set `HARDWARE_MODE=mqtt` to subscribe to `aihub/status/#`, `aihub/sensor/#`, `aihub/event/#`, and `aihub/resp/#` and map them into the in-memory hardware graph.
 - Direct hardware writes over `/v1/hardware/ws` are rejected, so MQTT remains the only ingress path.
 - Persistent session/memory/config data lives under `AGENT_DATA_DIR`.
-- The old `web/app/api/chat` path is no longer the active chat path for the website UI.
 
 ## Hardware Events Schema
 
@@ -140,7 +121,7 @@ bun test
 
 - Hardware: ESP32-S3 / ESP32-C3, POGO-pin magnetic connectors
 - Server: Bun + Hono + `pi-coding-agent`
-- Website: Next.js 16 + React 19 + Tailwind CSS 4 + Three.js
+- Frontend: Next.js 16 + React 19 + Tailwind CSS 4 + Three.js
 - AI: OpenAI / other providers via `pi-ai`
 
 ## Team
