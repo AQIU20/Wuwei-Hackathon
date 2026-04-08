@@ -156,7 +156,7 @@ export function Landing() {
       {/* Gallery marquee — community cards */}
       <GalleryMarquee />
 
-      {/* Smart Space — sensors + scenes interleaved */}
+      {/* Smart Space — scattered collage layout */}
       <section className="relative mx-auto max-w-7xl px-6 pb-28 lg:px-10">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -173,47 +173,7 @@ export function Landing() {
           </h2>
         </motion.div>
 
-        {/* Interleaved: sensor module → scene, sensor → scene, ... */}
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {t.scenes.items.map((scene, i) => {
-            const mod = moduleImages[i % moduleImages.length];
-            return (
-              <motion.div
-                key={scene.src}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.08, duration: 0.5 }}
-                className="contents"
-              >
-                {/* Sensor module card */}
-                <div className="flex items-center justify-center rounded-xl border border-black/6 bg-black/[0.02] p-6">
-                  <motion.div
-                    className="drop-shadow-md"
-                    animate={{ y: [0, -6, 0, 4, 0], rotate: [-2, 2, -1, 1, -2] }}
-                    transition={{ duration: 4 + i * 0.7, repeat: Infinity, ease: "easeInOut" }}
-                    whileHover={{ scale: 1.15 }}
-                  >
-                    <Image src={mod.src} alt={mod.alt} width={80} height={80} className="h-auto w-20" />
-                  </motion.div>
-                </div>
-                {/* Scene card */}
-                <div className="group overflow-hidden rounded-xl border border-black/8 bg-black/[0.02] transition-colors duration-300 hover:border-black/20">
-                  <div className="relative aspect-[4/3] overflow-hidden">
-                    <Image
-                      src={scene.src}
-                      alt={scene.alt}
-                      fill
-                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-                      className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    />
-                  </div>
-                  <p className="px-2 py-1.5 text-[10px] leading-relaxed text-black/45">{scene.alt}</p>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+        <SceneCollage scenes={t.scenes.items} />
       </section>
 
       {/* Team — scrolling photo gallery */}
@@ -258,6 +218,116 @@ const moduleImages = [
   { src: "/modules/滚珠追迹.png", alt: "Ball Tracker / 滚珠追迹" },
   { src: "/modules/sensor.png", alt: "Sensor / 传感器" },
 ];
+
+/* Scene positions: { top, left, width } in % — hand-tuned to match the collage layout */
+const sceneLayout: { top: string; left: string; w: number; z: number }[] = [
+  { top: "0%",  left: "0%",  w: 220, z: 2 },   // cooking — top-left
+  { top: "2%",  left: "52%", w: 200, z: 3 },   // sleeping — top-right
+  { top: "5%",  left: "28%", w: 240, z: 1 },   // baby — top-center (large)
+  { top: "38%", left: "0%",  w: 200, z: 2 },   // mood — mid-left
+  { top: "34%", left: "55%", w: 230, z: 3 },   // movie — mid-right
+  { top: "40%", left: "25%", w: 190, z: 1 },   // work — mid-center
+  { top: "68%", left: "8%",  w: 210, z: 2 },   // bedtime — bottom-left
+  { top: "70%", left: "48%", w: 220, z: 3 },   // blocks — bottom-right
+];
+
+const sensorPositions: { top: string; left: string }[] = [
+  { top: "8%",  left: "22%" },
+  { top: "3%",  left: "78%" },
+  { top: "28%", left: "48%" },
+  { top: "32%", left: "8%"  },
+  { top: "55%", left: "78%" },
+  { top: "60%", left: "20%" },
+  { top: "63%", left: "50%" },
+  { top: "82%", left: "38%" },
+  { top: "15%", left: "88%" },
+  { top: "75%", left: "75%" },
+];
+
+function SceneCollage({ scenes }: { scenes: { src: string; alt: string }[] }) {
+  return (
+    <>
+      {/* Desktop: scattered collage */}
+      <div className="hidden lg:block">
+        <div className="relative mx-auto" style={{ maxWidth: 900, height: 800 }}>
+          {/* Scene images at various sizes and positions */}
+          {scenes.map((scene, i) => {
+            const pos = sceneLayout[i] || sceneLayout[0];
+            return (
+              <motion.div
+                key={scene.src}
+                initial={{ opacity: 0, scale: 0.85 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.1 + i * 0.08, duration: 0.6 }}
+                className="absolute group"
+                style={{ top: pos.top, left: pos.left, width: pos.w, zIndex: pos.z }}
+              >
+                <div className="overflow-hidden rounded-2xl shadow-md transition-all duration-300 hover:shadow-xl hover:scale-[1.03]">
+                  <Image
+                    src={scene.src}
+                    alt={scene.alt}
+                    width={pos.w}
+                    height={Math.round(pos.w * 0.75)}
+                    className="h-auto w-full object-cover"
+                  />
+                </div>
+              </motion.div>
+            );
+          })}
+
+          {/* Sensor modules scattered between scenes */}
+          {moduleImages.slice(0, sensorPositions.length).map((mod, i) => {
+            const pos = sensorPositions[i];
+            return (
+              <motion.div
+                key={mod.src}
+                initial={{ opacity: 0, scale: 0.5 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                viewport={{ once: true }}
+                transition={{ delay: 0.3 + i * 0.06, duration: 0.5 }}
+                className="absolute z-20"
+                style={{ top: pos.top, left: pos.left, width: 56 }}
+              >
+                <motion.div
+                  className="drop-shadow-lg"
+                  animate={{ y: [0, -5, 0, 3, 0], rotate: [-2, 2, -1, 1, -2] }}
+                  transition={{ duration: 4 + i * 0.6, repeat: Infinity, ease: "easeInOut" }}
+                  whileHover={{ scale: 1.2 }}
+                >
+                  <Image src={mod.src} alt={mod.alt} width={56} height={56} className="h-auto w-full" />
+                </motion.div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Mobile: simple grid */}
+      <div className="lg:hidden">
+        <div className="mb-6 flex flex-wrap justify-center gap-3">
+          {moduleImages.slice(0, 8).map((mod) => (
+            <Image key={mod.src} src={mod.src} alt={mod.alt} width={44} height={44} className="h-auto w-11 drop-shadow-md" />
+          ))}
+        </div>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          {scenes.map((s, i) => (
+            <motion.div
+              key={s.src}
+              initial={{ opacity: 0, y: 12 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: i * 0.05, duration: 0.5 }}
+              className="overflow-hidden rounded-xl shadow-sm"
+            >
+              <Image src={s.src} alt={s.alt} width={300} height={225} className="h-auto w-full object-cover" />
+            </motion.div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+}
 
 function TeamMarquee() {
   // Double the images for seamless infinite scroll
