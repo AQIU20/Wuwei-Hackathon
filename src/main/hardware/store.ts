@@ -8,7 +8,7 @@ import {
 } from '../tools/hardware-mock/data'
 
 export interface BlockSnapshot extends BlockState {
-  latest?: Record<string, number>
+  latest?: Record<string, unknown>
   actuator?: Record<string, unknown>
   scene?: string
 }
@@ -33,7 +33,7 @@ export type HardwareIngressMessage =
       block: Partial<BlockState> & Pick<BlockState, 'block_id' | 'capability' | 'type'>
     }
   | { type: 'status'; block_id: string; status: BlockState['status']; battery?: number }
-  | { type: 'telemetry'; block_id: string; data: Record<string, number>; timestamp?: number }
+  | { type: 'telemetry'; block_id: string; data: Record<string, unknown>; timestamp?: number }
   | { type: 'snapshot'; block_id: string; scene: string; timestamp?: number }
   | {
       type: 'actuator_state'
@@ -69,6 +69,29 @@ function toNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
 }
 
+function readNumber(source: Record<string, unknown> | undefined, ...keys: string[]): number | null {
+  if (!source) return null
+
+  for (const key of keys) {
+    const value = toNumber(source[key])
+    if (value !== null) {
+      return value
+    }
+  }
+
+  return null
+}
+
+function firstNumber(values: Array<number | null>): number | null {
+  for (const value of values) {
+    if (value !== null) {
+      return value
+    }
+  }
+
+  return null
+}
+
 export class HardwareStore {
   private actuatorState: ActuatorState = {
     light: { r: 0, g: 0, b: 0, brightness: 0, pattern: null },
@@ -77,7 +100,7 @@ export class HardwareStore {
   private blocks = new Map<string, BlockSnapshot>()
   private cameraScenes = new Map<string, string>()
   private listeners = new Set<Listener>()
-  private sensorReadings = new Map<string, Record<string, number>>()
+  private sensorReadings = new Map<string, Record<string, unknown>>()
 
   constructor() {
     for (const block of BLOCKS) {
@@ -129,20 +152,25 @@ export class HardwareStore {
       scene: this.cameraScenes.get(block.block_id),
     }))
 
-    const env = this.sensorReadings.get('env_01')
-    const humidity = this.sensorReadings.get('env_02')
-    const bpm = this.sensorReadings.get('heart_01')
-    const hcho = this.sensorReadings.get('air_01')
+    const metricSource = blocks
+      .map((block) => block.latest)
+      .filter((latest): latest is Record<string, unknown> => Boolean(latest))
 
     return {
       blocks,
       actuatorState: cloneActuatorState(this.actuatorState),
       updatedAt: new Date().toISOString(),
       metrics: {
-        temp: toNumber(env?.temp_c),
-        humidity: toNumber(humidity?.rh),
-        bpm: toNumber(bpm?.bpm),
-        hcho: toNumber(hcho?.hcho_mg),
+        temp: firstNumber(
+          metricSource.map((latest) => readNumber(latest, 'temp_c', 'temperature_c')),
+        ),
+        humidity: firstNumber(
+          metricSource.map((latest) => readNumber(latest, 'humidity_pct', 'rh', 'humidity')),
+        ),
+        bpm: firstNumber(metricSource.map((latest) => readNumber(latest, 'heart_rate_bpm', 'bpm'))),
+        hcho: firstNumber(
+          metricSource.map((latest) => readNumber(latest, 'hcho_mg', 'hcho_mg_m3')),
+        ),
       },
     }
   }
@@ -155,7 +183,7 @@ export class HardwareStore {
     return this.getSnapshot().blocks.find((block) => block.block_id === blockId) ?? null
   }
 
-  getSensorData(blockId: string): { block: BlockSnapshot; data: Record<string, number> } | null {
+  getSensorData(blockId: string): { block: BlockSnapshot; data: Record<string, unknown> } | null {
     const block = this.blocks.get(blockId)
     if (!block || block.type !== 'sensor') return null
 

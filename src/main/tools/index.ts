@@ -9,6 +9,6 @@ export function createCustomTools(ctx: ToolContext): ToolDefinition<any, any, an
   return [
     ...createTavilyTools(ctx),
     ...createHardwareHistoryTools(ctx.history),
-    ...createHardwareTools(ctx.hardware),
+    ...createHardwareTools(ctx.hardware, ctx.mqttBridge ?? null),
   ]
 }

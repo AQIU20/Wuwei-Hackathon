@@ -1,5 +1,6 @@
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
 import { type Static, Type } from '@sinclair/typebox'
+import type { AihubMqttBridge } from '../../hardware/mqtt-bridge'
 import type { HardwareStore } from '../../hardware/store'
 
 const listBlocksSchema = Type.Object({
@@ -110,7 +111,10 @@ function createGetSensorDataTool(
       }
 
       const valueLines = Object.entries(result.data)
-        .map(([key, value]) => `  ${key}: ${value}`)
+        .map(
+          ([key, value]) =>
+            `  ${key}: ${typeof value === 'object' && value !== null ? JSON.stringify(value) : value}`,
+        )
         .join('\n')
 
       return {
@@ -211,7 +215,7 @@ const controlActuatorSchema = Type.Object({
   }),
   action: Type.String({
     description:
-      'The action to perform. Light: "set_color", "set_pattern", "off". Vibration: "pulse", "pattern", "off".',
+      'The action to perform. Light: "on", "set_color", "set_pattern", "off". Vibration: "pulse", "pattern", "off".',
   }),
   params: Type.Optional(
     Type.Record(Type.String(), Type.Unknown(), {
@@ -225,6 +229,7 @@ type ControlActuatorParams = Static<typeof controlActuatorSchema>
 
 function createControlActuatorTool(
   hardware: HardwareStore,
+  mqttBridge: AihubMqttBridge | null,
 ): ToolDefinition<typeof controlActuatorSchema> {
   return {
     name: 'control_actuator',
@@ -279,6 +284,24 @@ function createControlActuatorTool(
       }
 
       const next = hardware.controlActuator(params.block_id, params.action, params.params ?? {})
+      const commandResult = mqttBridge
+        ? await mqttBridge.publishActuatorCommand(
+            params.block_id,
+            params.action,
+            params.params ?? {},
+          )
+        : null
+      const publishSummary = mqttBridge
+        ? commandResult
+          ? [
+              `MQTT topic: ${commandResult.topic}`,
+              `MQTT payload: ${commandResult.payload}`,
+              ...(commandResult.compatibilityTopics?.length
+                ? [`MQTT compatibility topics: ${commandResult.compatibilityTopics.join(', ')}`]
+                : []),
+            ]
+          : ['MQTT publish: not sent for this action mapping']
+        : ['MQTT publish: disabled (local state only)']
       const stateStr = JSON.stringify(next?.state ?? {}, null, 2)
 
       return {
@@ -286,8 +309,9 @@ function createControlActuatorTool(
           {
             type: 'text',
             text: [
-              `Command sent to ${params.block_id} (${block.capability}): ${params.action}`,
+              `Command handled for ${params.block_id} (${block.capability}): ${params.action}`,
               `Parameters: ${JSON.stringify(params.params ?? {})}`,
+              ...publishSummary,
               '',
               'Current actuator state:',
               stateStr,
@@ -300,12 +324,92 @@ function createControlActuatorTool(
   }
 }
 
+const requestBlockInfoSchema = Type.Object({
+  block_id: Type.String({
+    description: 'The block ID / node_id to query for latest node info via MQTT.',
+  }),
+})
+
+type RequestBlockInfoParams = Static<typeof requestBlockInfoSchema>
+
+function createRequestBlockInfoTool(
+  hardware: HardwareStore,
+  mqttBridge: AihubMqttBridge | null,
+): ToolDefinition<typeof requestBlockInfoSchema> {
+  return {
+    name: 'request_block_info',
+    label: 'Request Block Info',
+    description:
+      'Request the latest online info / capability snapshot from a real AI Hub node over MQTT.',
+    promptSnippet: 'Request fresh block info from the hardware node over MQTT.',
+    promptGuidelines: [
+      'Use this when the user asks to refresh hardware status or when the node metadata may be stale.',
+      'Only works when the MQTT bridge is enabled.',
+    ],
+    parameters: requestBlockInfoSchema,
+    async execute(_id: string, params: RequestBlockInfoParams) {
+      const block = hardware.getBlock(params.block_id)
+      if (!block) {
+        return {
+          content: [{ type: 'text', text: `Error: block "${params.block_id}" not found.` }],
+          details: undefined,
+          isError: true,
+        }
+      }
+
+      if (!mqttBridge?.isEnabled()) {
+        return {
+          content: [{ type: 'text', text: 'Error: MQTT bridge is not enabled on this server.' }],
+          details: undefined,
+          isError: true,
+        }
+      }
+
+      if (!mqttBridge.isConnected()) {
+        return {
+          content: [{ type: 'text', text: 'Error: MQTT bridge is not connected to the broker.' }],
+          details: undefined,
+          isError: true,
+        }
+      }
+
+      const published = await mqttBridge.requestInfo(params.block_id)
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `Requested fresh node info for ${params.block_id}.`,
+              `MQTT topic: ${published.topic}`,
+              `MQTT payload: ${published.payload}`,
+              ...(published.compatibilityTopics?.length
+                ? [`MQTT compatibility topics: ${published.compatibilityTopics.join(', ')}`]
+                : []),
+            ].join('\n'),
+          },
+        ],
+        details: undefined,
+      }
+    },
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function createHardwareTools(hardware: HardwareStore): ToolDefinition<any, any, any>[] {
-  return [
+export function createHardwareTools(
+  hardware: HardwareStore,
+  mqttBridge: AihubMqttBridge | null,
+): ToolDefinition<any, any, any>[] {
+  const tools: ToolDefinition<any, any, any>[] = [
     createListBlocksTool(hardware),
     createGetSensorDataTool(hardware),
     createGetCameraSnapshotTool(hardware),
-    createControlActuatorTool(hardware),
+    createControlActuatorTool(hardware, mqttBridge),
   ]
+
+  if (mqttBridge?.isEnabled()) {
+    tools.push(createRequestBlockInfoTool(hardware, mqttBridge))
+  }
+
+  return tools
 }

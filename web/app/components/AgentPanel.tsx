@@ -1,7 +1,7 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { getAgentServerUrl, getHardwareWebSocketUrl } from "@/lib/agent-server";
 import { useI18n } from "@/lib/i18n";
 import { MagneticButton } from "./MagneticButton";
@@ -68,6 +68,14 @@ type HardwareSnapshot = {
   };
 };
 
+type LightActuatorState = {
+  brightness: number;
+  b: number;
+  g: number;
+  pattern: string | null;
+  r: number;
+};
+
 const AGENT_SERVER_URL = getAgentServerUrl();
 
 export function AgentPanel() {
@@ -82,6 +90,11 @@ export function AgentPanel() {
   const [error, setError] = useState<string | null>(null);
   const requestAbortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const lightBlock =
+    snapshot?.blocks.find((block) => block.capability === "light") ?? null;
+  const lightState = getLightActuatorState(lightBlock?.actuator);
+  const lightSwatch = getLightSwatchStyle(lightState);
+  const lightSummary = getLightSummary(lightState, locale);
 
   useEffect(() => {
     const el = scrollRef.current;
@@ -418,6 +431,77 @@ export function AgentPanel() {
         </SpotlightCard>
 
         <SpotlightCard>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-black/40">
+              {locale === "zh" ? "灯光状态" : "light state"}
+            </p>
+            <span className="font-mono text-[10px] text-black/35">
+              {lightBlock?.block_id ?? "light_01"}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3">
+            <div
+              className="relative overflow-hidden rounded-2xl border border-black/10 px-4 py-4"
+              style={lightSwatch}
+            >
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.55),transparent_40%)]" />
+              <div className="relative flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-display text-lg text-black/85">
+                    {lightSummary.title}
+                  </p>
+                  <p className="mt-1 text-xs leading-relaxed text-black/55">
+                    {lightSummary.detail}
+                  </p>
+                </div>
+                <span
+                  className={`mt-1 block h-2.5 w-2.5 rounded-full ${
+                    lightBlock?.status === "online"
+                      ? "pulse-dot bg-[color:var(--accent-2)]"
+                      : "bg-black/20"
+                  }`}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-2 text-[11px] text-black/55">
+              <LightStat
+                label="RGB"
+                value={
+                  lightState
+                    ? `${lightState.r}/${lightState.g}/${lightState.b}`
+                    : "0/0/0"
+                }
+              />
+              <LightStat
+                label={locale === "zh" ? "亮度" : "brightness"}
+                value={lightState ? `${lightState.brightness}%` : "0%"}
+              />
+              <LightStat
+                label={locale === "zh" ? "模式" : "pattern"}
+                value={lightState?.pattern ?? (locale === "zh" ? "常亮" : "solid")}
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {[
+                locale === "zh" ? "把 light_01 打开，暖白色" : "Turn light_01 on with a warm white color",
+                locale === "zh" ? "把 light_01 切成彩虹模式" : "Set light_01 to rainbow mode",
+                locale === "zh" ? "把 light_01 关掉" : "Turn light_01 off",
+              ].map((prompt) => (
+                <button
+                  key={prompt}
+                  type="button"
+                  onClick={() => sendSuggestion(prompt)}
+                  disabled={isLoading || !sessionId}
+                  className="rounded-full border border-black/10 bg-black/[0.03] px-3 py-1.5 text-[11px] text-black/65 transition-all hover:border-black/25 hover:bg-black/[0.06] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </SpotlightCard>
+
+        <SpotlightCard>
           <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-black/40">
             {t.agent.online}
           </p>
@@ -710,6 +794,17 @@ function Metric({
   );
 }
 
+function LightStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-black/10 bg-black/[0.02] px-3 py-2.5">
+      <div className="font-mono text-[9px] uppercase tracking-[0.14em] text-black/35">
+        {label}
+      </div>
+      <div className="mt-1 font-mono text-[11px] text-black/70">{value}</div>
+    </div>
+  );
+}
+
 function ProactiveAlerts({
   alerts,
   onAsk,
@@ -922,6 +1017,88 @@ function MicIcon() {
       />
     </svg>
   );
+}
+
+function getLightActuatorState(
+  actuator: Record<string, unknown> | undefined,
+): LightActuatorState | null {
+  if (!actuator) return null;
+
+  const r = clampByte(actuator.r);
+  const g = clampByte(actuator.g);
+  const b = clampByte(actuator.b);
+  const brightness = clampPercent(actuator.brightness);
+
+  return {
+    brightness,
+    b,
+    g,
+    pattern: typeof actuator.pattern === "string" ? actuator.pattern : null,
+    r,
+  };
+}
+
+function getLightSwatchStyle(
+  state: LightActuatorState | null,
+): CSSProperties {
+  if (!state || (state.brightness === 0 && state.pattern === null)) {
+    return {
+      background:
+        "linear-gradient(135deg, rgba(15,23,42,0.92), rgba(39,39,42,0.88))",
+    };
+  }
+
+  const alpha = Math.max(0.18, state.brightness / 100);
+  const glow = `rgba(${state.r}, ${state.g}, ${state.b}, ${alpha.toFixed(2)})`;
+  const edge = `rgba(${state.r}, ${state.g}, ${state.b}, ${Math.min(alpha + 0.18, 0.92).toFixed(2)})`;
+
+  return {
+    background: `linear-gradient(135deg, ${glow}, ${edge})`,
+    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.22), 0 12px 32px ${glow}`,
+  };
+}
+
+function getLightSummary(
+  state: LightActuatorState | null,
+  locale: Locale,
+): { detail: string; title: string } {
+  if (!state || (state.brightness === 0 && state.pattern === null)) {
+    return locale === "zh"
+      ? { detail: "等待 Agent 指令。试试“把灯打开”或“切成彩虹模式”。", title: "当前已关闭" }
+      : { detail: "Waiting for an agent command. Try “turn the light on” or “set rainbow mode”.", title: "Currently off" };
+  }
+
+  if (state.pattern) {
+    return locale === "zh"
+      ? {
+          detail: `模式 ${state.pattern}，亮度 ${state.brightness}%`,
+          title: `正在运行 ${state.pattern}`,
+        }
+      : {
+          detail: `Pattern ${state.pattern}, brightness ${state.brightness}%`,
+          title: `${state.pattern} pattern active`,
+        };
+  }
+
+  return locale === "zh"
+    ? {
+        detail: `RGB ${state.r}/${state.g}/${state.b}，亮度 ${state.brightness}%`,
+        title: "当前常亮",
+      }
+    : {
+        detail: `RGB ${state.r}/${state.g}/${state.b}, brightness ${state.brightness}%`,
+        title: "Solid light active",
+      };
+}
+
+function clampByte(value: unknown): number {
+  const next = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return Math.max(0, Math.min(255, Math.round(next)));
+}
+
+function clampPercent(value: unknown): number {
+  const next = typeof value === "number" && Number.isFinite(value) ? value : 0;
+  return Math.max(0, Math.min(100, Math.round(next)));
 }
 
 function fromTranscriptMessage(message: SessionResponse["transcript"][number]): Message {

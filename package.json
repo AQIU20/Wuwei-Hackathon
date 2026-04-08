@@ -4,6 +4,8 @@
   "description": "Cloud agent server for Unforce Make, with coding tools and live hardware access.",
   "scripts": {
     "dev": "bun --watch src/main/index.ts",
+    "bridge": "bun run scripts/hardware-bridge.ts",
+    "mqtt:test:hello": "bun run scripts/mqtt-hello-publisher.ts",
     "dev:web": "bun --cwd web run dev",
     "start": "bun src/main/index.ts",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
@@ -23,6 +25,7 @@
     "@sinclair/typebox": "^0.34.48",
     "@tavily/core": "^0.7.2",
     "hono": "^4.12.12",
+    "mqtt": "^5.15.1",
     "rehype-highlight": "^7.0.2"
   },
   "devDependencies": {

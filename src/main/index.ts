@@ -5,8 +5,10 @@ import { Hono } from 'hono'
 import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import { AgentRuntime } from './agent'
-import { isMockHardwareMode, resolveHardwareMode } from './hardware/mode'
+import { isMockHardwareMode, isMqttHardwareMode, resolveHardwareMode } from './hardware/mode'
+import { AihubMqttBridge } from './hardware/mqtt-bridge'
 import { type HardwareIngressMessage, HardwareStore } from './hardware/store'
+import { HardwareEventService } from './history/hardware-event-service'
 import { SupabaseHistoryService } from './history/supabase-history-service'
 import { PreferenceMemoryService } from './memory/preference-memory-service'
 import { ConfigService } from './providers/config-service'
@@ -21,11 +23,17 @@ const registry = new ProviderRegistry(configService)
 const memoryService = new PreferenceMemoryService(join(paths.memoryDir, 'preferences.sqlite'))
 const hardwareMode = resolveHardwareMode()
 const mockHardwareMode = isMockHardwareMode(hardwareMode)
+const mqttHardwareMode = isMqttHardwareMode(hardwareMode)
 const hardware = new HardwareStore()
 const history = mockHardwareMode ? new SupabaseHistoryService() : null
 const galleryDb = new Database(join(paths.memoryDir, 'gallery.sqlite'))
 galleryDb.run('CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
 galleryDb.run('CREATE TABLE IF NOT EXISTS gallery (id INTEGER PRIMARY KEY, username TEXT, sensors TEXT, easter_eggs TEXT, image TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
+const hardwareEvents = new HardwareEventService()
+const mqttBridge = new AihubMqttBridge({
+  eventService: hardwareEvents,
+  hardware,
+})
 const stopSimulation = mockHardwareMode ? hardware.startSimulation() : null
 const sessions = new Map<string, AgentRuntime>()
 type WebSocketConnection = { send: (data: string) => void }
@@ -49,6 +57,7 @@ function createRuntime(): AgentRuntime {
     hardware,
     history,
     memoryService,
+    mqttBridge: mqttHardwareMode ? mqttBridge : null,
     registry,
     sessionDir: paths.sessionDir,
   })
@@ -115,6 +124,8 @@ app.get('/ready', (c) => {
       configuredProviders: configuredProviders.map((provider) => provider.id),
       hardwareMode,
       history: history?.getStatus() ?? { enabled: false, mode: hardwareMode, tableName: null },
+      hardwareEvents: hardwareEvents.getStatus(),
+      mqttBridge: mqttBridge.getStatus(),
       ok: isReady,
       workspace: paths.cwd,
     },
@@ -189,6 +200,42 @@ app.get('/v1/history', async (c) => {
     return c.json(
       {
         error: error instanceof Error ? error.message : 'Failed to query hardware history',
+      },
+      500,
+    )
+  }
+})
+
+app.get('/v1/hardware-events', async (c) => {
+  if (!hardwareEvents.isEnabled()) {
+    return c.json({ error: 'Supabase hardware events are not configured' }, 503)
+  }
+
+  const capability = c.req.query('capability')
+  const nodeId = c.req.query('node_id')
+  const scope = c.req.query('scope')
+  const type = c.req.query('type')
+  const limit = Math.min(Math.max(Number(c.req.query('limit') || 20), 1), 100)
+  const minutes = Math.min(
+    Math.max(Number(c.req.query('minutes') || c.req.query('range_minutes') || 60), 1),
+    24 * 60,
+  )
+
+  try {
+    const result = await hardwareEvents.queryEvents({
+      capability,
+      limit,
+      minutes,
+      nodeId,
+      scope,
+      type,
+    })
+
+    return c.json(result)
+  } catch (error) {
+    return c.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to query hardware events',
       },
       500,
     )
@@ -436,6 +483,13 @@ app.get('/v1/gallery/:id/image', (c) => {
 })
 
 const port = Number(process.env.PORT || 8787)
+
+if (mqttHardwareMode && mqttBridge.isEnabled()) {
+  void mqttBridge.start().catch((error) => {
+    console.error('[mqtt] bridge start failed:', error)
+  })
+}
+
 const server = BunRuntime.Bun.serve({
   fetch: app.fetch,
   port,
@@ -446,10 +500,29 @@ console.log(`[server] Unforce Make agent server listening on http://localhost:${
 console.log(`[server] Workspace cwd: ${paths.cwd}`)
 console.log(`[server] Data dir: ${paths.dataDir}`)
 console.log(`[server] Hardware mode: ${hardwareMode}`)
-console.log(`[server] Supabase history: ${history?.isEnabled() ? 'enabled (mock)' : 'disabled'}`)
+console.log(
+  `[server] Supabase history: ${history.isEnabled() ? 'enabled' : 'disabled (no Supabase config)'}`,
+)
+console.log(
+  `[server] Hardware events: ${hardwareEvents.isEnabled() ? 'enabled' : 'disabled (no Supabase config)'}`,
+)
+console.log(
+  `[server] MQTT bridge: ${
+    mqttHardwareMode
+      ? mqttBridge.isEnabled()
+        ? 'configured'
+        : 'disabled (no MQTT_BROKER_URI)'
+      : 'inactive (HARDWARE_MODE is not mqtt)'
+  }`,
+)
 
 function shutdown(): void {
   stopSimulation?.()
+  if (mqttHardwareMode) {
+    void mqttBridge.stop().catch((error) => {
+      console.error('[mqtt] bridge stop failed:', error)
+    })
+  }
   for (const runtime of sessions.values()) {
     runtime.destroy()
   }

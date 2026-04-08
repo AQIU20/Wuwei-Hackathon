@@ -17,6 +17,7 @@ import {
   ModelRegistry,
   SessionManager,
 } from '@mariozechner/pi-coding-agent'
+import type { AihubMqttBridge } from './hardware/mqtt-bridge'
 import type { HardwareStore } from './hardware/store'
 import type { SupabaseHistoryService } from './history/supabase-history-service'
 import type { PreferenceMemoryService } from './memory/preference-memory-service'
@@ -33,7 +34,15 @@ Be concise and direct. When working with files or commands, briefly explain what
 You also have access to connected hardware blocks (ESP32 sensor/actuator modules) through a live hardware gateway.
 Use list_blocks to discover available hardware, get_sensor_data to read sensor values,
 get_camera_snapshot to see what a camera sees, and control_actuator to control lights or vibration.
-When the user asks about their environment, health data, or wants to control devices, use these tools proactively.` +
+When the user asks about their environment, health data, or wants to control devices, use these tools proactively.
+For the built-in mock hardware demo, the main light actuator is usually block_id "light_01".
+When the user asks to turn the light on without a specific color, use control_actuator on "light_01"
+with action "set_color" and a warm visible default such as r=255, g=180, b=120, brightness=80.
+Supported light actions are:
+- "set_color" with params { r, g, b, brightness }
+- "set_pattern" with params { pattern, brightness } where pattern is one of "breathing", "strobe", "rainbow", "steady"
+- "off" to turn the light off
+If there is only one relevant online actuator, use it directly after confirming it exists.` +
   ` If historical hardware data is available in Supabase, use get_hardware_history when the user asks about trends, past readings, or changes over time.`
 
 export interface UIMessage {
@@ -91,6 +100,7 @@ export interface AgentRuntimeOptions {
   hardware: HardwareStore
   history?: SupabaseHistoryService | null
   memoryService: PreferenceMemoryService
+  mqttBridge?: AihubMqttBridge | null
   registry: ProviderRegistry
   sessionDir: string
 }
@@ -342,6 +352,7 @@ export class AgentRuntime {
       getWebSearchConfig: () => this.options.configService.getWebSearchConfig(),
       hardware: this.options.hardware,
       history: this.options.history ?? null,
+      mqttBridge: this.options.mqttBridge ?? null,
     })
 
     const resourceLoader = new DefaultResourceLoader({
