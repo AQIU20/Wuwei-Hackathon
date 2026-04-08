@@ -334,13 +334,21 @@ export class AihubMqttBridge {
           ? params.brightness
           : 100
 
-      const color = `#${[params.r, params.g, params.b]
-        .map((value) =>
-          clamp(Number(value ?? 0), 0, 255)
-            .toString(16)
-            .padStart(2, '0'),
-        )
+      const r = clamp(Number(params.r ?? 255), 0, 255)
+      const g = clamp(Number(params.g ?? 255), 0, 255)
+      const b = clamp(Number(params.b ?? 255), 0, 255)
+
+      const color = `#${[r, g, b]
+        .map((value) => value.toString(16).padStart(2, '0'))
         .join('')}`
+
+      const compatibilityTopics = this.publishLegacyCommands
+        ? [
+            await this.publishLegacy(blockId, 'led', JSON.stringify({ led: 'on' })).then(
+              (r) => r.topic,
+            ),
+          ]
+        : undefined
 
       const payload = buildCommandEnvelope(blockId, 'set_led', {
         brightness,
@@ -349,7 +357,8 @@ export class AihubMqttBridge {
         segment: null,
       })
 
-      return this.publishEnvelope(blockId, 'set_led', payload)
+      const result = await this.publishEnvelope(blockId, 'set_led', payload)
+      return { ...result, compatibilityTopics }
     }
 
     if (normalizedAction === 'on') {
