@@ -12,5 +12,6 @@ ENV AGENT_DATA_DIR=/data
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN mkdir -p /data
 EXPOSE 8787
 CMD ["bun", "src/main/index.ts"]
