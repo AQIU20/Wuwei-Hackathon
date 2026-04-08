@@ -21,6 +21,7 @@ import type { AihubMqttBridge } from './hardware/mqtt-bridge'
 import type { HardwareStore } from './hardware/store'
 import type { HardwareEventService } from './history/hardware-event-service'
 import type { SupabaseHistoryService } from './history/supabase-history-service'
+import type { AgentMemoryCurator } from './memory/agent-memory-curator'
 import type { PreferenceMemoryService } from './memory/preference-memory-service'
 import type { ConfigService } from './providers/config-service'
 import type { ProviderRegistry } from './providers/registry'
@@ -122,6 +123,7 @@ export interface AgentRuntimeOptions {
   hardware: HardwareStore
   hardwareEvents?: HardwareEventService | null
   history?: SupabaseHistoryService | null
+  agentMemories?: AgentMemoryCurator | null
   memoryService: PreferenceMemoryService
   mqttBridge?: AihubMqttBridge | null
   registry: ProviderRegistry
@@ -182,9 +184,12 @@ export class AgentRuntime {
     const session = await this.ensureSession()
 
     try {
-      const memoryContext = this.options.memoryService.getPromptContext()
-      this.currentMemoryContext = memoryContext.text
-      this.currentInjectedMemoryIds = memoryContext.ids
+      const preferenceMemoryContext = this.options.memoryService.getPromptContext()
+      const agentMemoryContext = await this.options.agentMemories?.buildPromptContext()
+      this.currentMemoryContext = [preferenceMemoryContext.text, agentMemoryContext]
+        .filter(Boolean)
+        .join('\n\n')
+      this.currentInjectedMemoryIds = preferenceMemoryContext.ids
       this.activeTurn = { userText: input.text, assistantText: '' }
       this.currentMessageId = input.messageId
 

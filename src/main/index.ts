@@ -10,6 +10,7 @@ import { AihubMqttBridge } from './hardware/mqtt-bridge'
 import { type HardwareIngressMessage, HardwareStore } from './hardware/store'
 import { HardwareEventService } from './history/hardware-event-service'
 import { SupabaseHistoryService } from './history/supabase-history-service'
+import { AgentMemoryCurator } from './memory/agent-memory-curator'
 import { PreferenceMemoryService } from './memory/preference-memory-service'
 import { SupabaseMemoryService } from './memory/supabase-memory-service'
 import { ConfigService } from './providers/config-service'
@@ -44,6 +45,12 @@ try {
   /* column already exists */
 }
 const hardwareEvents = new HardwareEventService()
+const agentMemories = new AgentMemoryCurator({
+  configService,
+  hardwareEvents,
+  registry,
+  supabaseMemory,
+})
 const mqttBridge = new AihubMqttBridge({
   eventService: hardwareEvents,
   hardware,
@@ -70,6 +77,7 @@ function createRuntime(): AgentRuntime {
     hardware,
     hardwareEvents,
     history,
+    agentMemories,
     memoryService,
     mqttBridge: mqttHardwareMode ? mqttBridge : null,
     registry,
@@ -134,6 +142,7 @@ app.get('/ready', (c) => {
       hardwareMode,
       history: history?.getStatus() ?? { enabled: false, mode: hardwareMode, tableName: null },
       hardwareEvents: hardwareEvents.getStatus(),
+      agentMemories: agentMemories.getStatus(),
       mqttBridge: mqttBridge.getStatus(),
       ok: isReady,
       workspace: paths.cwd,
@@ -648,6 +657,7 @@ if (mqttHardwareMode && mqttBridge.isEnabled()) {
     console.error('[mqtt] bridge start failed:', error)
   })
 }
+agentMemories.start()
 
 const server = BunRuntime.Bun.serve({
   fetch: app.fetch,
@@ -684,6 +694,7 @@ function shutdown(): void {
   for (const runtime of sessions.values()) {
     runtime.destroy()
   }
+  agentMemories.stop()
   memoryService.destroy()
   galleryDb.close()
   server.stop(true)
