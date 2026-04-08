@@ -1,6 +1,6 @@
+import { Database } from 'bun:sqlite'
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
-import { Database } from 'bun:sqlite'
 import { Hono } from 'hono'
 import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
@@ -22,16 +22,27 @@ configService.init()
 
 const registry = new ProviderRegistry(configService)
 const supabaseMemory = new SupabaseMemoryService()
-const memoryService = new PreferenceMemoryService(join(paths.memoryDir, 'preferences.sqlite'), supabaseMemory)
+const memoryService = new PreferenceMemoryService(
+  join(paths.memoryDir, 'preferences.sqlite'),
+  supabaseMemory,
+)
 const hardwareMode = resolveHardwareMode()
 const mqttHardwareMode = isMqttHardwareMode(hardwareMode)
 const hardware = new HardwareStore()
 const history = new SupabaseHistoryService()
 const galleryDb = new Database(join(paths.memoryDir, 'gallery.sqlite'))
-galleryDb.run('CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
-galleryDb.run('CREATE TABLE IF NOT EXISTS gallery (id INTEGER PRIMARY KEY, username TEXT, sensors TEXT, easter_eggs TEXT, image TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)')
+galleryDb.run(
+  'CREATE TABLE IF NOT EXISTS waitlist (id INTEGER PRIMARY KEY, email TEXT UNIQUE, created_at TEXT DEFAULT CURRENT_TIMESTAMP)',
+)
+galleryDb.run(
+  'CREATE TABLE IF NOT EXISTS gallery (id INTEGER PRIMARY KEY, username TEXT, sensors TEXT, easter_eggs TEXT, image TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)',
+)
 // Add message column if missing (safe migration)
-try { galleryDb.run('ALTER TABLE gallery ADD COLUMN message TEXT DEFAULT \'\'') } catch { /* column already exists */ }
+try {
+  galleryDb.run("ALTER TABLE gallery ADD COLUMN message TEXT DEFAULT ''")
+} catch {
+  /* column already exists */
+}
 const hardwareEvents = new HardwareEventService()
 const mqttBridge = new AihubMqttBridge({
   eventService: hardwareEvents,
@@ -411,6 +422,54 @@ app.post('/v1/chat/sessions/:sessionId/messages', async (c) => {
 
 // --- Memory routes ---
 
+app.get('/v1/memories', async (c) => {
+  if (!supabaseMemory.isEnabled()) {
+    return c.json({ error: 'Memory service unavailable' }, 503)
+  }
+
+  try {
+    const items = await supabaseMemory.listMemories()
+    return c.json({ items })
+  } catch (error) {
+    return c.json(
+      { error: error instanceof Error ? error.message : 'Failed to list memories' },
+      500,
+    )
+  }
+})
+
+app.patch('/v1/memories/:id', async (c) => {
+  if (!supabaseMemory.isEnabled()) {
+    return c.json({ error: 'Memory service unavailable' }, 503)
+  }
+
+  const id = c.req.param('id')
+  const body = (await c.req.json()) as { value?: string; reason?: string | null }
+  const value = body.value?.trim()
+  if (!value) return c.json({ error: 'value is required' }, 400)
+
+  try {
+    await supabaseMemory.updateMemory(id, value, body.reason?.trim() || null)
+    return c.json({ ok: true })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Update failed' }, 500)
+  }
+})
+
+app.delete('/v1/memories/:id', async (c) => {
+  if (!supabaseMemory.isEnabled()) {
+    return c.json({ error: 'Memory service unavailable' }, 503)
+  }
+
+  const id = c.req.param('id')
+  try {
+    await supabaseMemory.deleteMemory(id)
+    return c.json({ ok: true })
+  } catch (error) {
+    return c.json({ error: error instanceof Error ? error.message : 'Delete failed' }, 500)
+  }
+})
+
 app.get('/v1/memory/preferences', async (c) => {
   try {
     const items = memoryService.listManageablePreferences().map((item) => ({
@@ -428,7 +487,10 @@ app.get('/v1/memory/preferences', async (c) => {
     }))
     return c.json({ items, remoteEnabled: supabaseMemory.isEnabled() })
   } catch (error) {
-    return c.json({ error: error instanceof Error ? error.message : 'Failed to list memories' }, 500)
+    return c.json(
+      { error: error instanceof Error ? error.message : 'Failed to list memories' },
+      500,
+    )
   }
 })
 
@@ -511,13 +573,21 @@ app.post('/v1/gallery', async (c) => {
   }
   const result = galleryDb.run(
     'INSERT INTO gallery (username, message, sensors, easter_eggs, image) VALUES (?, ?, ?, ?, ?)',
-    [username, message ?? '', JSON.stringify(sensors ?? []), JSON.stringify(easterEggs ?? []), imageBase64 ?? ''],
+    [
+      username,
+      message ?? '',
+      JSON.stringify(sensors ?? []),
+      JSON.stringify(easterEggs ?? []),
+      imageBase64 ?? '',
+    ],
   )
   // Auto-add email to waitlist if provided
   if (email?.trim()) {
     try {
       galleryDb.run('INSERT INTO waitlist (email) VALUES (?)', [email.trim()])
-    } catch { /* ignore duplicate */ }
+    } catch {
+      /* ignore duplicate */
+    }
   }
   return c.json({ ok: true, id: Number(result.lastInsertRowid) })
 })
@@ -526,8 +596,14 @@ app.get('/v1/gallery', (c) => {
   const limit = Math.min(Math.max(Number(c.req.query('limit') || 20), 1), 100)
   const offset = Math.max(Number(c.req.query('offset') || 0), 0)
 
-  const total = (galleryDb.query('SELECT COUNT(*) as count FROM gallery').get() as { count: number }).count
-  const rows = galleryDb.query('SELECT id, username, message, sensors, easter_eggs, created_at FROM gallery ORDER BY created_at DESC LIMIT ? OFFSET ?').all(limit, offset) as {
+  const total = (
+    galleryDb.query('SELECT COUNT(*) as count FROM gallery').get() as { count: number }
+  ).count
+  const rows = galleryDb
+    .query(
+      'SELECT id, username, message, sensors, easter_eggs, created_at FROM gallery ORDER BY created_at DESC LIMIT ? OFFSET ?',
+    )
+    .all(limit, offset) as {
     id: number
     username: string
     message: string
@@ -550,7 +626,9 @@ app.get('/v1/gallery', (c) => {
 
 app.get('/v1/gallery/:id/image', (c) => {
   const id = Number(c.req.param('id'))
-  const row = galleryDb.query('SELECT image FROM gallery WHERE id = ?').get(id) as { image: string } | null
+  const row = galleryDb.query('SELECT image FROM gallery WHERE id = ?').get(id) as {
+    image: string
+  } | null
   if (!row) return c.json({ error: 'Not found' }, 404)
 
   const base64 = row.image.replace(/^data:image\/\w+;base64,/, '')
