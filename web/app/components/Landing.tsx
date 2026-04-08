@@ -244,11 +244,19 @@ const teamPhotos = ["/team/1.jpg", "/team/2.jpg", "/team/3.jpg", "/team/4.jpg", 
 
 const moduleImages = [
   { src: "/modules/麦克.png", alt: "Voice / 麦克" },
+  { src: "/modules/声音.png", alt: "Sound / 声音" },
   { src: "/modules/相机.png", alt: "Camera / 相机" },
+  { src: "/modules/触觉.png", alt: "Touch / 触觉" },
   { src: "/modules/温度.png", alt: "Temperature / 温度" },
   { src: "/modules/湿度.png", alt: "Humidity / 湿度" },
   { src: "/modules/震动.png", alt: "Haptics / 震动" },
   { src: "/modules/追迹.png", alt: "Posture / 追迹" },
+  { src: "/modules/方向.png", alt: "Direction / 方向" },
+  { src: "/modules/距离.png", alt: "Distance / 距离" },
+  { src: "/modules/天气.png", alt: "Weather / 天气" },
+  { src: "/modules/位置.png", alt: "Location / 位置" },
+  { src: "/modules/滚珠追迹.png", alt: "Ball Tracker / 滚珠追迹" },
+  { src: "/modules/sensor.png", alt: "Sensor / 传感器" },
 ];
 
 function TeamMarquee() {
