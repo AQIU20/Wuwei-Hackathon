@@ -156,7 +156,7 @@ export function Landing() {
           className="mb-10 text-center"
         >
           <span className="font-mono text-[11px] uppercase tracking-[0.22em] text-black/40">
-            {locale === "zh" ? "智能空间" : "Smart Space"}
+            {locale === "zh" ? "智能空间" : locale === "ja" ? "スマートスペース" : "Smart Space"}
           </span>
           <h2 className="font-display mt-3 text-[clamp(2rem,4.5vw,3rem)] font-medium leading-[1.05] tracking-[-0.03em] text-gray-900">
             {t.scenes.title}

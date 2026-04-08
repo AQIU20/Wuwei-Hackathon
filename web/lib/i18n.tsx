@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 
-export type Locale = "en" | "zh";
+export type Locale = "en" | "zh" | "ja";
 
 export const dict = {
   en: {
@@ -224,6 +224,7 @@ export const dict = {
       label: "Language",
       en: "English",
       zh: "中文",
+      ja: "日本語",
     },
   },
   zh: {
@@ -438,6 +439,221 @@ export const dict = {
       label: "语言",
       en: "English",
       zh: "中文",
+      ja: "日本語",
+    },
+  },
+  ja: {
+    brand: "Unforce Make",
+    nav: {
+      home: "ホーム",
+      agent: "Agent",
+      dev: "開発者",
+      docs: "ドキュメント",
+      cta: "Agentを試す",
+    },
+    hero: {
+      badge: "Unforce Make · ハッカソン 2026",
+      titleA: "ブロックを積む。",
+      titleB: "感覚は、無限に。",
+      subtitle: "あなたの空間が、あなたを理解しはじめる。",
+      desc: "生活の中で気づけないことが多すぎる——人の感覚には限界があるから。AIセンサーブロックを身につけて、どこにでも置いて、自由に組み合わせる。あなたの代わりに、すべてを感じ取る。",
+      primary: "部屋と話す",
+      primaryHref: "/agent",
+      secondary: "開発者ドキュメント",
+      secondaryHref: "/dev",
+      stats: [
+        { k: "身につける", v: "ウェアラブル" },
+        { k: "空間", v: "全方位" },
+        { k: "どこでも", v: "常時感知" },
+      ],
+    },
+    values: {
+      eyebrow: "Unforce Makeの特徴",
+      cards: [
+        {
+          icon: "magnet",
+          t: "設定不要",
+          d: "磁石でつなぐだけ。3秒で、空間がつながる。",
+        },
+        {
+          icon: "layers",
+          t: "すべてをひとつに",
+          d: "カメラも、マイクも、センサーも——ひとつのAPIで、すべてが語りかける。",
+        },
+        {
+          icon: "brain",
+          t: "AIと話す空間",
+          d: "見て、聞いて、感じて。あなたの部屋が、はじめて「わかる」ようになる。",
+        },
+      ],
+    },
+    modules: {
+      eyebrow: "ブロック",
+      title: "8種類のモジュール、3カテゴリ",
+      categories: {
+        stream: "ストリーム (ESP32-S3)",
+        sensor: "センサー (ESP32-C3)",
+        actuator: "アクチュエータ (ESP32-C3)",
+      },
+      items: [
+        { id: "vision", name: "ビジョン", cat: "stream", proto: "UDP :5600", desc: "JPEG映像フレーム" },
+        { id: "voice", name: "ボイス", cat: "stream", proto: "WebSocket :8765", desc: "双方向オーディオ" },
+        { id: "env", name: "環境", cat: "sensor", proto: "MQTT", desc: "温度＆湿度" },
+        { id: "hr", name: "心拍", cat: "sensor", proto: "MQTT", desc: "BPM & HRV" },
+        { id: "hcho", name: "ホルムアルデヒド", cat: "sensor", proto: "MQTT", desc: "HCHO濃度" },
+        { id: "imu", name: "姿勢", cat: "sensor", proto: "MQTT", desc: "IMU加速度＆ジャイロ" },
+        { id: "light", name: "LEDストリップ", cat: "actuator", proto: "MQTT", desc: "WS2812カラー制御" },
+        { id: "vibe", name: "ハプティクス", cat: "actuator", proto: "MQTT", desc: "振動モーター" },
+      ],
+    },
+    scenes: {
+      eyebrow: "ブロックのある暮らし",
+      title: "すぐに使えるシーン",
+      lead: "モジュールを選んで、シーンを作ろう。",
+      items: [
+        { src: "/scene-smart-cooking.png", alt: "スマート調理アシスタント" },
+        { src: "/scene-bath-voice.png", alt: "入浴ボイスアシスタント" },
+        { src: "/scene-sleep-health.png", alt: "睡眠健康モニタリング" },
+        { src: "/scene-baby-remote.png", alt: "赤ちゃんリモート見守り" },
+        { src: "/scene-mood-adjust.png", alt: "気分検知＆自動調整" },
+        { src: "/scene-movie-rec.png", alt: "映画スマートおすすめ" },
+        { src: "/scene-recipe-timer.png", alt: "音声レシピ＆タイマー" },
+        { src: "/scene-sleep-alarm.png", alt: "睡眠品質＆スマートアラーム" },
+        { src: "/scene-ambient-mood.png", alt: "アンビエント音楽＆照明" },
+        { src: "/scene-meeting.png", alt: "会議スケジュールリマインダー" },
+        { src: "/scene-sleep-tips.png", alt: "快眠アドバイス＆アラーム" },
+        { src: "/scene-toddler-play.png", alt: "幼児遊び＆お昼寝リマインダー" },
+        { src: "/scene-balcony-air.png", alt: "バルコニー空気品質モニター" },
+      ],
+    },
+    team: {
+      eyebrow: "チーム",
+      title: "",
+      desc: "",
+    },
+    agent: {
+      header: "Unforce Agent · オンライン",
+      ready: "クラウドAgent · コーディング + ハードウェア",
+      placeholder: "部屋に何でも聞いてみて…",
+      send: "送信",
+      stop: "停止",
+      suggestions: [
+        "今、部屋の空気は大丈夫？",
+        "読書中に姿勢を正すよう教えて",
+        "照明をサンセットモードにして",
+        "今のバイタルはどう？",
+      ],
+      thinking: "考え中…",
+      signals: "ライブ信号",
+      online: "オンラインブロック",
+      metrics: {
+        temp: "温度",
+        humidity: "湿度",
+        bpm: "心拍",
+        hcho: "ホルムアルデヒド",
+      },
+      blockLabels: {
+        environment: "環境",
+        "heart-rate": "心拍",
+        camera: "カメラ",
+        voice: "ボイス",
+        "led-strip": "LEDストリップ",
+        haptics: "ハプティクス",
+        posture: "姿勢",
+        formaldehyde: "ホルムアルデヒド",
+      },
+      errorFallback: "Agentサーバーは現在利用できません。",
+      proactive: {
+        title: "プロアクティブインサイト",
+        alerts: [
+          { icon: "heart", text: "過去30分間の安静時心拍数が高め（平均92 bpm）。休憩をおすすめします。", severity: "warn" as const },
+          { icon: "air", text: "ホルムアルデヒド濃度が上昇中 — 過去1時間で0.09→0.12 mg/m³。換気をおすすめします。", severity: "warn" as const },
+          { icon: "posture", text: "55分間座りっぱなしです。ストレッチの時間です！", severity: "info" as const },
+          { icon: "sleep", text: "昨夜のデータ（深い睡眠5.2h）から、午後3時以降に疲れを感じるかもしれません。20分の仮眠がおすすめです。", severity: "info" as const },
+          { icon: "mood", text: "音声分析でエネルギー低下を検知。暖色モードに切り替えて気分を上げます。", severity: "action" as const },
+        ],
+      },
+    },
+    dev: {
+      heroTitle: "開発者ハブ",
+      heroDesc: "Unforce Makeプラットフォームで開発するために必要なすべて。",
+      mqttCardTitle: "MQTT · CLI",
+      pyCardTitle: "Agent · Python",
+      topicsTitle: "MQTTトピック仕様",
+      portsTitle: "ホストサービス",
+      topics: [
+        { t: "blocks/+/announce", d: "起動時にid / タイプ / 機能を報告" },
+        { t: "blocks/+/status", d: "online · offline（自動LWT）" },
+        { t: "blocks/+/data", d: "センサーテレメトリ（温度、IMU、心拍…）" },
+        { t: "blocks/{id}/config", d: "Host → ブロックの作業設定" },
+        { t: "blocks/{id}/command", d: "Agent/Host → アクチュエータコマンド" },
+      ],
+      services: [
+        { port: ":1883", name: "MQTT Broker", tag: "Mosquitto · QoS 1 · LWT" },
+        { port: ":5600", name: "UDP Server", tag: "ビジョンブロックJPEGフレーム" },
+        { port: ":8765", name: "WebSocket", tag: "ボイスブロック双方向オーディオ" },
+        { port: ":3000", name: "Host API", tag: "Agent＆フロントエンドゲートウェイ" },
+      ],
+      downloads: "ハードウェアリソース",
+      downloadItems: [
+        { name: "3Dモデル (.STEP)", desc: "エンクロージャ＆ドックCADファイル" },
+        { name: "ファームウェアバイナリ", desc: "ビルド済みESP32-S3 / C3イメージ" },
+        { name: "回路図", desc: "回路図＆BOM" },
+      ],
+      docsLink: "完全なプロトコルドキュメント →",
+    },
+    docs: {
+      title: "プロトコル＆アーキテクチャ",
+      desc: "Unforce Makeプラットフォームの完全な技術リファレンス。",
+    },
+    contextMachine: {
+      title: "コンテキストマシン",
+      subtitle: "あなたの足跡を残そう",
+      username: "あなたの名前",
+      usernamePlaceholder: "カードに表示する名前を入力",
+      sensorPalette: "センサーパレット",
+      stage: "ここにセンサーをドロップ",
+      generate: "カードを生成",
+      generating: "生成中…",
+      easterEggUnlock: "アンロック済み",
+      card: {
+        title: "モーメントカード",
+        sensors: "センサー",
+        unlocked: "アンロック済み",
+      },
+      waitlist: {
+        title: "ウェイトリストに参加",
+        desc: "Unforce Makeのローンチ情報をいち早くお届けします。",
+        placeholder: "your@email.com",
+        submit: "参加",
+        success: "リストに登録されました！",
+        duplicate: "すでにリストに登録されています！",
+      },
+      gallery: {
+        title: "コミュニティギャラリー",
+        empty: "まだカードがありません。最初の一枚を作ろう！",
+        post: "ギャラリーに投稿",
+        posted: "投稿済み！",
+      },
+      cta: {
+        eyebrow: "コンテキストを構築",
+        title: "理想の部屋は何を感じる？",
+        desc: "ドラッグ、組み合わせ、発見——そしてウェイトリストに参加して、現実にしよう。",
+        button: "コンテキストマシンを試す",
+      },
+    },
+    footer: {
+      subtitle: "ハッカソン · 2026",
+      blurb: "",
+      github: "GitHub",
+      docs: "ドキュメント",
+      contact: "お問い合わせ",
+    },
+    lang: {
+      label: "言語",
+      en: "English",
+      zh: "中文",
+      ja: "日本語",
     },
   },
 };
@@ -460,7 +676,7 @@ function getStoredLocale(): Locale | null {
   }
 
   const stored = localStorage.getItem(LOCALE_STORAGE_KEY);
-  return stored === "zh" || stored === "en" ? stored : null;
+  return stored === "zh" || stored === "en" || stored === "ja" ? stored : null;
 }
 
 function getPreferredLocale(): Locale {
@@ -473,6 +689,9 @@ function getPreferredLocale(): Locale {
     const lang = navigator.language.toLowerCase();
     if (lang.startsWith("zh")) {
       return "zh";
+    }
+    if (lang.startsWith("ja")) {
+      return "ja";
     }
   }
 
@@ -508,7 +727,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (typeof document !== "undefined") {
-      document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+      document.documentElement.lang = locale === "zh" ? "zh-CN" : locale === "ja" ? "ja" : "en";
     }
   }, [locale]);
 

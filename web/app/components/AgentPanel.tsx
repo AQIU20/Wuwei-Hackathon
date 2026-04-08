@@ -7,7 +7,7 @@ import { useI18n } from "@/lib/i18n";
 import { MagneticButton } from "./MagneticButton";
 import { SpotlightCard } from "./SpotlightCard";
 
-type Locale = "en" | "zh";
+type Locale = "en" | "zh" | "ja";
 
 type Message = {
   content?: string;
@@ -715,7 +715,7 @@ function Empty({
   suggestions,
   onPick,
 }: {
-  locale: "en" | "zh";
+  locale: Locale;
   suggestions: readonly string[];
   onPick: (s: string) => void;
 }) {
@@ -1172,17 +1172,17 @@ function formatMetric(value: number | null | undefined, suffix = "") {
 }
 
 function formatCapabilityLabel(capability: string, locale: Locale) {
-  const labels: Record<string, { en: string; zh: string }> = {
-    camera: { en: "camera", zh: "摄像头" },
-    formaldehyde: { en: "formaldehyde", zh: "甲醛" },
-    heart_rate: { en: "heart rate", zh: "心率" },
-    humidity: { en: "humidity", zh: "湿度" },
-    light: { en: "light", zh: "灯光" },
-    microphone: { en: "microphone", zh: "麦克风" },
-    temperature: { en: "temperature", zh: "温度" },
-    vibration: { en: "vibration", zh: "振动" },
-    voice: { en: "voice", zh: "语音" },
-    imu: { en: "imu", zh: "姿态" },
+  const labels: Record<string, Record<Locale, string>> = {
+    camera: { en: "camera", zh: "摄像头", ja: "カメラ" },
+    formaldehyde: { en: "formaldehyde", zh: "甲醛", ja: "ホルムアルデヒド" },
+    heart_rate: { en: "heart rate", zh: "心率", ja: "心拍" },
+    humidity: { en: "humidity", zh: "湿度", ja: "湿度" },
+    light: { en: "light", zh: "灯光", ja: "照明" },
+    microphone: { en: "microphone", zh: "麦克风", ja: "マイク" },
+    temperature: { en: "temperature", zh: "温度", ja: "温度" },
+    vibration: { en: "vibration", zh: "振动", ja: "振動" },
+    voice: { en: "voice", zh: "语音", ja: "ボイス" },
+    imu: { en: "imu", zh: "姿态", ja: "姿勢" },
   };
 
   const label = labels[capability];

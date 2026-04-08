@@ -12,15 +12,16 @@ export function LanguageToggle() {
       aria-label={t.lang.label}
       className="relative flex items-center rounded-full border border-black/10 bg-black/[0.03] p-1 backdrop-blur-xl"
     >
-      {(["en", "zh"] as const).map((l) => {
+      {(["en", "zh", "ja"] as const).map((l) => {
         const isActive = l === locale;
+        const label = l === "en" ? "EN" : l === "zh" ? "中文" : "JP";
         return (
           <button
             key={l}
             type="button"
             onClick={() => setLocale(l)}
             aria-pressed={isActive}
-            className={`relative z-10 min-w-[52px] rounded-full px-3 py-1.5 font-display text-[11px] font-medium tracking-[0.18em] uppercase transition-colors duration-300 ${
+            className={`relative z-10 min-w-[42px] rounded-full px-2.5 py-1.5 font-display text-[11px] font-medium tracking-[0.18em] uppercase transition-colors duration-300 ${
               isActive ? "text-black" : "text-black/60 hover:text-gray-900"
             }`}
           >
@@ -31,7 +32,7 @@ export function LanguageToggle() {
                 className="absolute inset-0 -z-10 rounded-full bg-[#ff6c37]"
               />
             )}
-            {l === "en" ? "EN" : "中文"}
+            {label}
           </button>
         );
       })}
