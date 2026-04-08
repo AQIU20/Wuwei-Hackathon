@@ -218,12 +218,17 @@ export class HardwareEventService {
   private async insertRows(rows: HardwareEventInsert[]): Promise<void> {
     if (!this.enabled || rows.length === 0) return
 
-    const response = await this.fetchImpl(new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()), {
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
+    // msg_id has a unique index — use upsert (ON CONFLICT DO NOTHING) so that
+    // ESP32 reboots with recycled msg_ids don't crash the service.
+    url.searchParams.set('on_conflict', 'msg_id')
+
+    const response = await this.fetchImpl(url, {
       method: 'POST',
       headers: {
         ...this.buildHeaders(),
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
+        Prefer: 'resolution=ignore-duplicates',
       },
       body: JSON.stringify(rows),
     })
