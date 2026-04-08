@@ -88,6 +88,10 @@ export const dict = {
         { src: "/scene-movie.png", alt: "Camera block recommends movies based on your vibe" },
         { src: "/scene-work.png", alt: "Camera block helps with meeting reminders and focus" },
         { src: "/scene-bedtime.png", alt: "Sound block creates the perfect sleep environment" },
+        { src: "/scene-playtime.png", alt: "Camera block keeps an eye on baby during playtime" },
+        { src: "/scene-balcony.png", alt: "Environment block creates the perfect balcony reading nook" },
+        { src: "/scene-cooking-code.png", alt: "Voice block assists coding while cooking" },
+        { src: "/scene-bathing-new.png", alt: "Environment block monitors bath temperature and safety" },
       ],
     },
     team: {
@@ -296,6 +300,10 @@ export const dict = {
         { src: "/scene-movie.png", alt: "摄像头块根据你的状态推荐电影" },
         { src: "/scene-work.png", alt: "摄像头块帮你管理会议提醒和专注状态" },
         { src: "/scene-bedtime.png", alt: "声音块打造完美的睡眠环境" },
+        { src: "/scene-playtime.png", alt: "摄像头块在宝宝玩耍时看护" },
+        { src: "/scene-balcony.png", alt: "环境块打造完美的阳台阅读角" },
+        { src: "/scene-cooking-code.png", alt: "语音块在做饭时协助编程" },
+        { src: "/scene-bathing-new.png", alt: "环境块监测洗澡水温和安全" },
       ],
     },
     team: {

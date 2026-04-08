@@ -224,10 +224,14 @@ const sceneLayout: { top: string; left: string; w: number; z: number }[] = [
   { top: "0%",  left: "0%",  w: 220, z: 2 },   // cooking — top-left
   { top: "2%",  left: "52%", w: 200, z: 3 },   // sleeping — top-right
   { top: "5%",  left: "28%", w: 240, z: 1 },   // baby — top-center (large)
-  { top: "38%", left: "0%",  w: 200, z: 2 },   // mood — mid-left
-  { top: "34%", left: "55%", w: 230, z: 3 },   // movie — mid-right
-  { top: "40%", left: "25%", w: 190, z: 1 },   // work — mid-center
-  { top: "68%", left: "8%",  w: 210, z: 2 },   // bedtime — bottom-left
+  { top: "28%", left: "0%",  w: 200, z: 2 },   // mood — mid-left
+  { top: "25%", left: "55%", w: 230, z: 3 },   // movie — mid-right
+  { top: "30%", left: "25%", w: 190, z: 1 },   // work — mid-center
+  { top: "50%", left: "8%",  w: 210, z: 2 },   // bedtime — bottom-left row
+  { top: "52%", left: "48%", w: 200, z: 3 },   // playtime — bottom-right
+  { top: "55%", left: "28%", w: 180, z: 1 },   // balcony — bottom-center
+  { top: "75%", left: "0%",  w: 210, z: 2 },   // cooking-code — last row left
+  { top: "73%", left: "50%", w: 220, z: 3 },   // bathing — last row right
 ];
 
 const sensorPositions: { top: string; left: string }[] = [
@@ -248,7 +252,7 @@ function SceneCollage({ scenes }: { scenes: { src: string; alt: string }[] }) {
     <>
       {/* Desktop: scattered collage */}
       <div className="hidden lg:block">
-        <div className="relative mx-auto" style={{ maxWidth: 900, height: 800 }}>
+        <div className="relative mx-auto" style={{ maxWidth: 900, height: 1100 }}>
           {/* Scene images at various sizes and positions */}
           {scenes.map((scene, i) => {
             const pos = sceneLayout[i] || sceneLayout[0];
