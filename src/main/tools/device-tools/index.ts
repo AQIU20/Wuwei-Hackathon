@@ -1,12 +1,6 @@
 /**
- * Device-specific tools — one tool per registered hardware block.
- *
- * Each online block gets its own tool whose name and description come from:
- *   1. HARDWARE_NODE_LABELS  e.g. {"led_fd8480":"桌面上的灯"}
- *   2. HARDWARE_NODE_DESCRIPTIONS  e.g. {"led_fd8480":"放在桌面右侧的 WS2812 灯条"}
- *
- * This lets the agent match natural language like "开启桌面上的灯" directly to
- * the correct block without a generic list_blocks + control_actuator round-trip.
+ * Device-specific tools — one tool per physical hardware block.
+ * Device names and descriptions are defined here in code.
  */
 
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
@@ -14,14 +8,21 @@ import { Type } from '@sinclair/typebox'
 import type { AihubMqttBridge } from '../../hardware/mqtt-bridge'
 import type { HardwareStore } from '../../hardware/store'
 
-function sanitizeName(blockId: string): string {
-  // Tool names must be [a-zA-Z0-9_-] and ≤ 64 chars
-  return `device_${blockId.replace(/[^a-zA-Z0-9_-]/g, '_')}`.slice(0, 64)
+interface DeviceDefinition {
+  blockId: string
+  label: string        // 自然语言名称，Agent 用这个匹配用户意图
+  description: string  // 描述这个设备是什么、在哪
 }
 
-function buildActuatorLabel(label: string, capability: string): string {
-  return label !== '' ? label : capability
-}
+// ── 在这里定义你的真实设备 ──────────────────────────────────────────────────
+const DEVICE_DEFINITIONS: DeviceDefinition[] = [
+  {
+    blockId: 'led_fd8480',
+    label: '桌面上的灯',
+    description: '放在桌面上的 WS2812 LED 灯条，可以控制颜色、亮度和动态效果',
+  },
+]
+// ────────────────────────────────────────────────────────────────────────────
 
 // ── Light actuator tool ───────────────────────────────────────────────────────
 
@@ -66,9 +67,9 @@ function createLightTool(
   })
 
   return {
-    name: sanitizeName(blockId),
-    label: buildActuatorLabel(label, 'light'),
-    description: description || `控制 ${label || blockId} 灯光（开/关/颜色/动态效果）`,
+    name: `device_${blockId.replace(/[^a-zA-Z0-9_-]/g, '_')}`.slice(0, 64),
+    label: label,
+    description: description,
     promptSnippet: `Control the light "${label || blockId}" (block: ${blockId})`,
     promptGuidelines: [
       `This tool directly controls the light device "${label || blockId}" (hardware id: ${blockId})`,
@@ -159,9 +160,10 @@ function createLightTool(
   }
 }
 
-// ── Sensor read tool ──────────────────────────────────────────────────────────
+// ── Sensor read tool (available for future sensor devices) ────────────────────
 
-function createSensorTool(
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function createSensorTool(
   blockId: string,
   label: string,
   description: string,
@@ -171,8 +173,8 @@ function createSensorTool(
   const schema = Type.Object({})
 
   return {
-    name: sanitizeName(blockId),
-    label: buildActuatorLabel(label, 'sensor'),
+    name: `device_${blockId.replace(/[^a-zA-Z0-9_-]/g, '_')}`.slice(0, 64),
+    label: label,
     description: description || `读取 ${label || blockId} 传感器的最新数据`,
     promptSnippet: `Read sensor data from "${label || blockId}" (block: ${blockId})`,
     promptGuidelines: [
@@ -223,20 +225,7 @@ export function createDeviceTools(
   mqttBridge: AihubMqttBridge | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): ToolDefinition<any, any, any>[] {
-  const blocks = hardware.listBlocks()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const tools: ToolDefinition<any, any, any>[] = []
-
-  for (const block of blocks) {
-    const label = hardware.getNodeLabel(block.block_id)
-    const desc = hardware.getNodeDescription(block.block_id) ?? ''
-
-    if (block.type === 'actuator' && block.capability === 'light') {
-      tools.push(createLightTool(block.block_id, label, desc, hardware, mqttBridge))
-    } else if (block.type === 'sensor') {
-      tools.push(createSensorTool(block.block_id, label, desc, hardware))
-    }
-  }
-
-  return tools
+  return DEVICE_DEFINITIONS.map((def) =>
+    createLightTool(def.blockId, def.label, def.description, hardware, mqttBridge),
+  )
 }
