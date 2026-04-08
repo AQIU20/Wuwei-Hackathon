@@ -117,6 +117,89 @@ bun test
 - `bun run mqtt:test:railway` is the primary end-to-end ingest test. It publishes a synthetic MQTT envelope to the broker, waits for the Railway agent-server to ingest it, and verifies the row through `GET /v1/hardware-events?msg_id=...`.
 - `bun run hardware-events:test:write` is only a direct Supabase write/read sanity check for the table itself. It bypasses the MQTT -> Railway ingest path.
 
+## Voice STT Module
+
+v1 microphone ingestion does not send raw audio into the agent server. Instead, local audio is transcribed on the hardware-side machine and only MQTT summary events are published:
+- `aihub/event/<node_id>/vad`
+- `aihub/event/<node_id>/transcript`
+
+The repo includes a local helper:
+
+```bash
+bun run voice:stt
+```
+
+It watches [`data/voice-inbox`](./data/voice-inbox) for `.wav` files, runs simple VAD, then executes an external STT CLI and publishes MQTT events.
+
+Recommended STT CLI: `whisper.cpp`
+
+Setup example:
+
+```bash
+git clone https://github.com/ggml-org/whisper.cpp.git
+cd whisper.cpp
+./models/download-ggml-model.sh base
+cmake -B build
+cmake --build build -j --config Release
+```
+
+Environment example:
+
+```bash
+export MQTT_BROKER_URI=mqtt://localhost:1883
+export MQTT_ROOT_TOPIC=aihub
+export VOICE_NODE_ID=vad_demo_01
+export VOICE_STT_COMMAND='/absolute/path/to/whisper.cpp/build/bin/whisper-cli -m /absolute/path/to/whisper.cpp/models/ggml-base.bin -f {input} -l auto -nt -of {output_base} -oj'
+bun run voice:stt
+```
+
+Command placeholders:
+- `{input}`: absolute path to the wav file being processed
+- `{output_base}`: output prefix for CLIs like `whisper-cli` that write `json/txt` files
+
+Quick smoke test:
+
+```bash
+cp /path/to/sample.wav data/voice-inbox/turn_the_lights_on.wav
+```
+
+If `VOICE_STT_COMMAND` is unset, the module falls back to using the file name stem as transcript text, which is only useful for MQTT pipeline testing.
+
+## Direct Voice Ingress
+
+For lower-latency microphone command entry, transcript text can bypass MQTT and be posted directly to the agent server:
+
+```bash
+curl -X POST http://localhost:8787/v1/voice/ingress \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "node_id": "mic_01",
+    "utterance_id": "utt-0001",
+    "event_id": "evt-0001",
+    "text": "turn on the desk light",
+    "is_final": true,
+    "confidence": 0.91,
+    "language": "en",
+    "wakeword": "hey hub",
+    "trigger": true,
+    "timestamp_ms": 1744123456891
+  }'
+```
+
+Behavior:
+- updates the live `HardwareStore` immediately so tools can read the newest microphone state
+- writes an async `hardware_events` row when Supabase is configured
+- if `is_final=true` and `trigger=true`, the text is injected directly into the agent as a user query
+
+Recommended request fields:
+- `node_id`: stable microphone ID, for example `mic_01`
+- `utterance_id`: stable per spoken utterance, used for prompt de-duplication
+- `event_id`: stable per POST event, used for event persistence de-duplication
+- `text`: transcript text
+- `is_final`: `true` only for the finalized transcript
+- `trigger`: `true` only when this utterance should become a user command
+- `confidence`, `language`, `wakeword`, `timestamp_ms`: optional metadata
+
 ## Tech Stack
 
 - Hardware: ESP32-S3 / ESP32-C3, POGO-pin magnetic connectors

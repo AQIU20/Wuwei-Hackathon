@@ -8,6 +8,7 @@ const capabilitySchema = Type.Union([
   Type.Literal('heart_rate_oximeter'),
   Type.Literal('imu'),
   Type.Literal('camera'),
+  Type.Literal('microphone'),
   Type.Literal('audio_video_hub'),
   Type.Literal('light'),
   Type.Literal('presence'),

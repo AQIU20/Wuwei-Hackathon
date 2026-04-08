@@ -91,4 +91,57 @@ describe('HardwareEventService', () => {
     expect(sample?.nodeId).toBe('env_hello01')
     expect(sample?.payload).toEqual({ message: 'hello' })
   })
+
+  it('writes direct voice ingress events into the hardware_events table', async () => {
+    const requests: Array<{ body?: string; method: string; url: string }> = []
+
+    const service = new HardwareEventService({
+      fetchImpl: async (input, init) => {
+        requests.push({
+          body: typeof init?.body === 'string' ? init.body : undefined,
+          method: init?.method ?? 'GET',
+          url: String(input),
+        })
+
+        return new Response('', { status: 201 })
+      },
+      serviceRoleKey: 'service-role',
+      supabaseUrl: 'https://example.supabase.co',
+      tableName: 'hardware_events',
+    })
+
+    await service.insertDirectEvent({
+      capability: 'microphone',
+      chip_family: null,
+      confidence: 0.91,
+      event_ts_ms: 1_712_345_678_901,
+      home_id: null,
+      ingest_trace_id: 'utt-123',
+      mac_suffix: null,
+      meta: { ingress: 'direct_http_voice' },
+      msg_id: 'voice-evt-1',
+      node_id: 'mic_01',
+      node_type: 'mic',
+      payload: { text: 'turn on the light', trigger: true, utterance_id: 'utt-123' },
+      protocol_version: 1,
+      recorded_at: '2026-04-08T00:00:00.000Z',
+      room_id: null,
+      scope: 'voice',
+      signal_name: 'triggered_transcript',
+      source: 'direct_voice_ingress',
+      status: null,
+      subject: 'transcript',
+      success: null,
+      topic: 'direct/voice/mic_01/transcript',
+      type: 'voice_transcript_final',
+    })
+
+    expect(requests).toHaveLength(1)
+    const [row] = JSON.parse(requests[0]?.body ?? '[]') as Array<Record<string, unknown>>
+    expect(row?.node_id).toBe('mic_01')
+    expect(row?.scope).toBe('voice')
+    expect(row?.capability).toBe('microphone')
+    expect(row?.signal_name).toBe('triggered_transcript')
+    expect(row?.source).toBe('direct_voice_ingress')
+  })
 })

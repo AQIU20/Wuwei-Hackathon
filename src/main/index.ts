@@ -56,6 +56,8 @@ const mqttBridge = new AihubMqttBridge({
   hardware,
 })
 const sessions = new Map<string, AgentRuntime>()
+const voiceSessionByNode = new Map<string, string>()
+const seenVoiceUtterances = new Map<string, number>()
 type WebSocketConnection = { send: (data: string) => void }
 const BunRuntime = globalThis as unknown as {
   Bun: {
@@ -110,6 +112,44 @@ async function resolveRuntime(sessionId: string): Promise<AgentRuntime> {
   await runtime.resumeSession(sessionId)
   sessions.set(runtime.getSessionSummary().id, runtime)
   return runtime
+}
+
+interface VoiceIngressBody {
+  chip?: string
+  confidence?: number | null
+  event_id?: string
+  firmware?: string
+  is_final?: boolean
+  is_partial?: boolean
+  language?: string | null
+  locale?: 'en' | 'zh'
+  node_id?: string
+  session_id?: string
+  text?: string
+  timestamp_ms?: number
+  trigger?: boolean
+  utterance_id?: string
+  wakeword?: string | null
+}
+
+function pruneSeenVoiceUtterances(now = Date.now()): void {
+  const ttlMs = 6 * 60 * 60 * 1000
+  for (const [key, seenAt] of seenVoiceUtterances.entries()) {
+    if (now - seenAt > ttlMs) {
+      seenVoiceUtterances.delete(key)
+    }
+  }
+}
+
+async function resolveVoiceRuntime(nodeId: string, requestedSessionId?: string) {
+  const sessionId = requestedSessionId?.trim() || voiceSessionByNode.get(nodeId)
+  const runtime = sessionId ? await resolveRuntime(sessionId) : await createSessionRuntime()
+  const summary = runtime.getSessionSummary()
+  voiceSessionByNode.set(nodeId, summary.id)
+  return {
+    runtime,
+    sessionId: summary.id,
+  }
 }
 
 app.use(
@@ -260,6 +300,115 @@ app.get('/v1/hardware-events', async (c) => {
       500,
     )
   }
+})
+
+app.post('/v1/voice/ingress', async (c) => {
+  const body = (await c.req.json()) as VoiceIngressBody
+  const nodeId = body.node_id?.trim()
+
+  if (!nodeId) {
+    return c.json({ error: 'node_id is required' }, 400)
+  }
+
+  const normalizedText = body.text?.trim() || ''
+  const utteranceId = body.utterance_id?.trim() || `utt-${randomUUID()}`
+  const eventId = body.event_id?.trim() || `voice-${randomUUID()}`
+  const timestampMs =
+    typeof body.timestamp_ms === 'number' && Number.isFinite(body.timestamp_ms)
+      ? body.timestamp_ms
+      : Date.now()
+  const isFinal = body.is_final === true || (body.is_partial !== true && normalizedText.length > 0)
+  const trigger = body.trigger === true
+
+  const voiceState = hardware.upsertVoiceState({
+    blockId: nodeId,
+    chip: body.chip?.trim() || undefined,
+    confidence: body.confidence ?? null,
+    firmware: body.firmware?.trim() || undefined,
+    isFinal,
+    language: body.language ?? null,
+    text: normalizedText,
+    timestampMs,
+    trigger,
+    utteranceId,
+    wakeword: body.wakeword ?? null,
+  })
+
+  if (hardwareEvents.isEnabled()) {
+    void hardwareEvents
+      .insertDirectEvent({
+        capability: 'microphone',
+        chip_family: null,
+        confidence:
+          typeof body.confidence === 'number' && Number.isFinite(body.confidence)
+            ? body.confidence
+            : null,
+        event_ts_ms: timestampMs,
+        home_id: null,
+        ingest_trace_id: utteranceId,
+        mac_suffix: null,
+        meta: {
+          ingress: 'direct_http_voice',
+          session_id: body.session_id ?? null,
+        },
+        msg_id: eventId,
+        node_id: nodeId,
+        node_type: 'mic',
+        payload: {
+          is_final: isFinal,
+          is_partial: !isFinal,
+          language: body.language ?? null,
+          text: normalizedText,
+          trigger,
+          utterance_id: utteranceId,
+          wakeword: body.wakeword ?? null,
+        },
+        protocol_version: 1,
+        recorded_at: new Date(timestampMs).toISOString(),
+        room_id: null,
+        scope: 'voice',
+        signal_name: trigger ? 'triggered_transcript' : 'transcript',
+        source: 'direct_voice_ingress',
+        status: null,
+        subject: 'transcript',
+        success: null,
+        topic: `direct/voice/${nodeId}/transcript`,
+        type: isFinal ? 'voice_transcript_final' : 'voice_transcript_partial',
+      })
+      .catch((error) => {
+        console.error('[voice] direct event persist failed:', error)
+      })
+  }
+
+  pruneSeenVoiceUtterances(timestampMs)
+
+  const dedupeKey = `${nodeId}:${utteranceId}`
+  const shouldPrompt =
+    isFinal && trigger && normalizedText.length > 0 && !seenVoiceUtterances.has(dedupeKey)
+
+  let prompted = false
+  let sessionId: string | null = body.session_id?.trim() || voiceSessionByNode.get(nodeId) || null
+
+  if (shouldPrompt) {
+    const resolved = await resolveVoiceRuntime(nodeId, body.session_id)
+    sessionId = resolved.sessionId
+    prompted = true
+    seenVoiceUtterances.set(dedupeKey, timestampMs)
+    void resolved.runtime.prompt({
+      locale: body.locale,
+      messageId: `voice-${utteranceId}`,
+      text: normalizedText,
+    })
+  }
+
+  return c.json({
+    ok: true,
+    block: voiceState.block,
+    prompted,
+    session_id: sessionId,
+    state: voiceState.state,
+    utterance_id: utteranceId,
+  })
 })
 
 app.get(

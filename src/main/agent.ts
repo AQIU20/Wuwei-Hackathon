@@ -41,6 +41,7 @@ block_id, capability, and MQTT routing — they are more reliable.
 
 Use list_blocks to discover available hardware.
 Use get_sensor_data for current readings.
+Use get_latest_voice_input for the most recent microphone transcript or partial utterance.
 Use get_hardware_history for state trends over time.
 Use get_hardware_events for event questions, detections, command responses, ingress tracing, and recent event counts.
 When the user asks to control a device by name (e.g. "桌面上的灯", "desk light"), look for a

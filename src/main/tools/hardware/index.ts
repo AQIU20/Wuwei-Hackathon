@@ -422,6 +422,76 @@ function createGetCameraSnapshotTool(
   }
 }
 
+const getLatestVoiceInputSchema = Type.Object({
+  block_id: Type.Optional(
+    Type.String({
+      description: 'Optional microphone block ID. If omitted, returns the most recently updated voice input.',
+    }),
+  ),
+})
+
+type GetLatestVoiceInputParams = Static<typeof getLatestVoiceInputSchema>
+
+function createGetLatestVoiceInputTool(
+  hardware: HardwareStore,
+): ToolDefinition<typeof getLatestVoiceInputSchema> {
+  return {
+    name: 'get_latest_voice_input',
+    label: 'Get Latest Voice Input',
+    description:
+      'Read the latest microphone transcript state cached in the live hardware store, including final text, partial text, trigger state, confidence, and wakeword.',
+    promptSnippet: 'Read the latest microphone transcript from the live hardware store.',
+    promptGuidelines: [
+      'Use this when the user asks what was just heard or when you need the newest microphone transcript state.',
+      'Prefer block_id when the user names a specific microphone device.',
+      'This tool returns live in-memory voice state, not historical event logs.',
+    ],
+    parameters: getLatestVoiceInputSchema,
+    async execute(_id: string, params: GetLatestVoiceInputParams) {
+      const result = params.block_id
+        ? hardware.getVoiceState(params.block_id)
+        : hardware.getLatestVoiceState()
+
+      if (!result) {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: params.block_id
+                ? `Error: no voice state is cached for "${params.block_id}".`
+                : 'No live voice input is cached in the hardware store yet.',
+            },
+          ],
+          details: undefined,
+          isError: true,
+        }
+      }
+
+      const { block, state } = result
+
+      return {
+        content: [
+          {
+            type: 'text',
+            text: [
+              `Voice block: ${block.block_id} (${block.capability}, ${block.status})`,
+              `Updated at: ${state.updated_at}`,
+              `Utterance ID: ${state.utterance_id}`,
+              `Final text: ${state.text ?? '(none)'}`,
+              `Partial text: ${state.partial_text ?? '(none)'}`,
+              `Triggered: ${state.trigger}`,
+              `Wakeword: ${state.wakeword ?? '(none)'}`,
+              `Confidence: ${state.confidence ?? '(unknown)'}`,
+              `Language: ${state.language ?? '(unknown)'}`,
+            ].join('\n'),
+          },
+        ],
+        details: undefined,
+      }
+    },
+  }
+}
+
 const controlActuatorSchema = Type.Object({
   block_id: Type.String({
     description: 'The actuator block ID (e.g. "light_01", "vibr_01")',
@@ -553,6 +623,7 @@ export function createHardwareTools(
     createListBlocksTool(hardware),
     createGetSensorDataTool(hardware),
     createGetCameraSnapshotTool(hardware),
+    createGetLatestVoiceInputTool(hardware),
     createControlActuatorTool(hardware, mqttBridge),
   ]
 

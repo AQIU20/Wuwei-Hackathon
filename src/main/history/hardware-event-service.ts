@@ -109,6 +109,10 @@ export class HardwareEventService {
     await this.insertRows(rows)
   }
 
+  async insertDirectEvent(row: HardwareEventInsert): Promise<void> {
+    await this.insertRows([row])
+  }
+
   async getEventByMsgId(msgId: string): Promise<HardwareEventSample | null> {
     if (!this.enabled) {
       throw new Error('Supabase hardware events are not configured')

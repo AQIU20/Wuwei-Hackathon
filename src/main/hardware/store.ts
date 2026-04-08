@@ -29,6 +29,20 @@ export interface HardwareMetrics {
   temp: number | null
 }
 
+export interface VoiceState {
+  confidence: number | null
+  is_final: boolean
+  language: string | null
+  last_finalized_at: string | null
+  partial_text: string | null
+  text: string | null
+  trigger: boolean
+  triggered_at: string | null
+  updated_at: string
+  utterance_id: string
+  wakeword: string | null
+}
+
 export interface HardwareSnapshot {
   actuatorState: ActuatorState
   blocks: BlockSnapshot[]
@@ -156,6 +170,7 @@ export class HardwareStore {
   private readonly nodeDescriptions: Record<string, string>
   private readonly nodeLabels: Record<string, string>
   private sensorReadings = new Map<string, Record<string, unknown>>()
+  private voiceStates = new Map<string, VoiceState>()
 
   constructor() {
     this.nodeLabels = parseNodeMetaMap(
@@ -177,7 +192,7 @@ export class HardwareStore {
   getSnapshot(): HardwareSnapshot {
     const blocks = [...this.blocks.values()].map((block) => ({
       ...block,
-      latest: this.sensorReadings.get(block.block_id),
+      latest: this.getLatestForBlock(block.block_id),
       actuator: this.getActuatorStateForBlock(block.block_id),
       scene: this.cameraScenes.get(block.block_id),
     }))
@@ -232,6 +247,102 @@ export class HardwareStore {
         latest: data,
       },
       data,
+    }
+  }
+
+  getVoiceState(blockId: string): { block: BlockSnapshot; state: VoiceState } | null {
+    const block = this.blocks.get(blockId)
+    const state = this.voiceStates.get(blockId)
+    if (!block || !state) return null
+
+    return {
+      block: {
+        ...block,
+        latest: this.toVoiceLatest(state),
+      },
+      state: { ...state },
+    }
+  }
+
+  getLatestVoiceState(): { block: BlockSnapshot; state: VoiceState } | null {
+    let latestBlockId: string | null = null
+    let latestState: VoiceState | null = null
+
+    for (const [blockId, state] of this.voiceStates.entries()) {
+      if (!latestState || state.updated_at > latestState.updated_at) {
+        latestBlockId = blockId
+        latestState = state
+      }
+    }
+
+    if (!latestBlockId || !latestState) return null
+    const block = this.blocks.get(latestBlockId)
+    if (!block) return null
+
+    return {
+      block: {
+        ...block,
+        latest: this.toVoiceLatest(latestState),
+      },
+      state: { ...latestState },
+    }
+  }
+
+  upsertVoiceState(args: {
+    blockId: string
+    chip?: string
+    confidence?: number | null
+    firmware?: string
+    isFinal: boolean
+    language?: string | null
+    text?: string | null
+    timestampMs?: number
+    trigger?: boolean
+    utteranceId: string
+    wakeword?: string | null
+  }): { block: BlockSnapshot; state: VoiceState } {
+    const timestampMs =
+      typeof args.timestampMs === 'number' && Number.isFinite(args.timestampMs)
+        ? args.timestampMs
+        : Date.now()
+    const updatedAt = new Date(timestampMs).toISOString()
+    const existingBlock = this.blocks.get(args.blockId)
+    const existingState = this.voiceStates.get(args.blockId)
+    const normalizedText = args.text?.trim() || null
+    const voiceState: VoiceState = {
+      confidence:
+        typeof args.confidence === 'number' && Number.isFinite(args.confidence)
+          ? args.confidence
+          : (existingState?.confidence ?? null),
+      is_final: args.isFinal,
+      language: args.language?.trim() || existingState?.language || null,
+      last_finalized_at: args.isFinal ? updatedAt : (existingState?.last_finalized_at ?? null),
+      partial_text: args.isFinal ? null : normalizedText,
+      text: args.isFinal ? normalizedText : (existingState?.text ?? null),
+      trigger: args.trigger === true,
+      triggered_at:
+        args.trigger === true && args.isFinal ? updatedAt : (existingState?.triggered_at ?? null),
+      updated_at: updatedAt,
+      utterance_id: args.utteranceId,
+      wakeword: args.wakeword?.trim() || existingState?.wakeword || null,
+    }
+
+    this.blocks.set(args.blockId, {
+      block_id: args.blockId,
+      battery: existingBlock?.battery ?? 100,
+      capability: existingBlock?.capability ?? 'microphone',
+      chip: args.chip ?? existingBlock?.chip ?? 'external',
+      firmware: args.firmware ?? existingBlock?.firmware ?? 'voice-ingress@1',
+      last_seen_ms: timestampMs,
+      status: 'online',
+      type: 'stream',
+    })
+    this.voiceStates.set(args.blockId, voiceState)
+    this.broadcast({ type: 'update', payload: this.getSnapshot() })
+
+    return {
+      block: this.getBlock(args.blockId) as BlockSnapshot,
+      state: { ...voiceState },
     }
   }
 
@@ -389,6 +500,31 @@ export class HardwareStore {
     }
 
     return undefined
+  }
+
+  private getLatestForBlock(blockId: string): Record<string, unknown> | undefined {
+    const voiceState = this.voiceStates.get(blockId)
+    if (voiceState) {
+      return this.toVoiceLatest(voiceState)
+    }
+
+    return this.sensorReadings.get(blockId)
+  }
+
+  private toVoiceLatest(state: VoiceState): Record<string, unknown> {
+    return {
+      confidence: state.confidence,
+      is_final: state.is_final,
+      language: state.language,
+      last_finalized_at: state.last_finalized_at,
+      partial_text: state.partial_text,
+      text: state.text,
+      trigger: state.trigger,
+      triggered_at: state.triggered_at,
+      updated_at: state.updated_at,
+      utterance_id: state.utterance_id,
+      wakeword: state.wakeword,
+    }
   }
 
   private broadcast(event: HardwareBroadcast): void {
