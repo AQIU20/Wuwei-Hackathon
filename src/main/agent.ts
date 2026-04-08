@@ -26,24 +26,43 @@ import type { ProviderRegistry } from './providers/registry'
 import { parseModelKey } from './providers/types'
 import { createCustomTools } from './tools'
 
-const SYSTEM_PROMPT =
+const BASE_SYSTEM_PROMPT =
   `You are a helpful AI assistant running on a cloud server for the Unforce Make platform.
 You have direct access to the server filesystem and can run shell commands when solving coding tasks.
 Be concise and direct. When working with files or commands, briefly explain what you're doing.
 
-You also have access to connected hardware blocks (ESP32 sensor/actuator modules) through a live hardware gateway.
-Use list_blocks to discover available hardware, get_sensor_data to read sensor values,
-get_camera_snapshot to see what a camera sees, and control_actuator to control lights or vibration.
-When the user asks about their environment, health data, or wants to control devices, use these tools proactively.
-For the built-in mock hardware demo, the main light actuator is usually block_id "light_01".
-When the user asks to turn the light on without a specific color, prefer control_actuator on "light_01"
-with action "set_pattern" and params { pattern: "rainbow", brightness: 80 } for best compatibility with ESP32 LED firmware.
-Supported light actions are:
-- "set_color" with params { r, g, b, brightness }
-- "set_pattern" with params { pattern, brightness } where pattern is one of "breathing", "strobe", "rainbow", "steady"
-- "off" to turn the light off
-If there is only one relevant online actuator, use it directly after confirming it exists.` +
-  ` If historical hardware data is available in Supabase, use get_hardware_history when the user asks about trends, past readings, or changes over time.`
+You have access to connected hardware blocks (ESP32 sensor/actuator modules) through a live hardware gateway.
+Each physical device has its own dedicated tool named after the device label.
+IMPORTANT: Always prefer the device-specific tool (e.g. "device_led_fd8480") over the generic control_actuator
+when you want to control a known device. The device-specific tools are pre-configured with the correct
+block_id, capability, and MQTT routing — they are more reliable.
+
+Use list_blocks to discover available hardware.
+Use get_sensor_data / get_hardware_history for sensor readings and trends.
+When the user asks to control a device by name (e.g. "桌面上的灯", "desk light"), look for a
+device-specific tool whose label matches, then call it directly.
+Supported light actions: "on", "off", "set_color" (with r,g,b,brightness), "set_pattern" (breathing/strobe/rainbow/steady/siri/particles).`
+
+export function buildSystemPrompt(hardware: HardwareStore): string {
+  const blocks = hardware.listBlocks().filter((b) => b.status === 'online')
+  if (blocks.length === 0) return BASE_SYSTEM_PROMPT
+
+  const deviceLines = blocks.map((b) => {
+    const label = hardware.getNodeLabel(b.block_id)
+    const desc = hardware.getNodeDescription(b.block_id)
+    const toolName = `device_${b.block_id.replace(/[^a-zA-Z0-9_-]/g, '_')}`.slice(0, 64)
+    const labelPart = label !== b.block_id ? ` ("${label}")` : ''
+    const descPart = desc ? ` — ${desc}` : ''
+    return `  • tool: ${toolName}  block: ${b.block_id}${labelPart}  type: ${b.type}/${b.capability}${descPart}`
+  })
+
+  return (
+    BASE_SYSTEM_PROMPT +
+    '\n\nCurrently online devices and their tool names:\n' +
+    deviceLines.join('\n') +
+    '\n\nAlways use the matching device tool when the user refers to a device by its label or description.'
+  )
+}
 
 export interface UIMessage {
   role: 'assistant' | 'user'
@@ -359,7 +378,7 @@ export class AgentRuntime {
       cwd: this.options.cwd,
       appendSystemPromptOverride: (base) =>
         this.currentMemoryContext ? [...base, this.currentMemoryContext] : base,
-      systemPromptOverride: () => SYSTEM_PROMPT,
+      systemPromptOverride: () => buildSystemPrompt(this.options.hardware),
       noExtensions: true,
       noPromptTemplates: true,
       noSkills: false,

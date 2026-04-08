@@ -1,6 +1,7 @@
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
 import { createHardwareHistoryTools } from './hardware-history'
 import { createHardwareTools } from './hardware-mock'
+import { createDeviceTools } from './device-tools'
 import { createTavilyTools } from './tavily'
 import type { ToolContext } from './types'
 
@@ -10,5 +11,6 @@ export function createCustomTools(ctx: ToolContext): ToolDefinition<any, any, an
     ...createTavilyTools(ctx),
     ...createHardwareHistoryTools(ctx.history),
     ...createHardwareTools(ctx.hardware, ctx.mqttBridge ?? null),
+    ...createDeviceTools(ctx.hardware, ctx.mqttBridge ?? null),
   ]
 }
