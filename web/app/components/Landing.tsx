@@ -317,7 +317,7 @@ export function Landing() {
   );
 }
 
-const teamPhotos = ["/team/1.jpg", "/team/2.jpg", "/team/3.jpg", "/team/4.jpg", "/team/5.jpg", "/team/6.jpg"];
+const teamPhotos = ["/team/1.jpg", "/team/2.jpg", "/team/3.jpg", "/team/4.jpg", "/team/5.jpg", "/team/6.jpg", "/team/7.png", "/team/8.png", "/team/9.png", "/team/10.jpg", "/team/11.jpg", "/team/12.jpg"];
 
 const moduleImages = [
   { src: "/modules/麦克.png", alt: "Voice / 麦克" },
@@ -356,7 +356,7 @@ function TeamMarquee() {
 
       <style jsx>{`
         .team-marquee {
-          animation: marquee-scroll 35s linear infinite;
+          animation: marquee-scroll 60s linear infinite;
           width: max-content;
         }
         .team-marquee:hover {
