@@ -595,9 +595,10 @@ function renderMarkdown(src: string): string {
   html = html.replace(/^&gt; (.+)$/gm, "<blockquote>$1</blockquote>");
   // Unordered lists — dash only (avoid eating * italic lines)
   html = html.replace(/^- (.+)$/gm, "<li>$1</li>");
-  html = html.replace(/((?:<li>[\s\S]*?<\/li>\n*)+)/g, "<ul>$1</ul>");
+  html = html.replace(/((?:<li>[\s\S]*?<\/li>\n*)+)/g, (m) => `<ul>${m.replace(/\n+/g, "")}</ul>`);
   // Ordered lists
   html = html.replace(/^\d+\. (.+)$/gm, "<li>$1</li>");
+  html = html.replace(/((?:<li>[\s\S]*?<\/li>\n*)+)/g, (m) => `<ol>${m.replace(/\n+/g, "")}</ol>`);
   // HR
   html = html.replace(/^---$/gm, "<hr/>");
   // Links
