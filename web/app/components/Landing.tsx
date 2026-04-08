@@ -228,7 +228,6 @@ const sceneLayout: { top: string; left: string; w: number; z: number }[] = [
   { top: "34%", left: "55%", w: 230, z: 3 },   // movie — mid-right
   { top: "40%", left: "25%", w: 190, z: 1 },   // work — mid-center
   { top: "68%", left: "8%",  w: 210, z: 2 },   // bedtime — bottom-left
-  { top: "70%", left: "48%", w: 220, z: 3 },   // blocks — bottom-right
 ];
 
 const sensorPositions: { top: string; left: string }[] = [

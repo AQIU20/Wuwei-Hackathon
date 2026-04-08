@@ -88,7 +88,6 @@ export const dict = {
         { src: "/scene-movie.png", alt: "Camera block recommends movies based on your vibe" },
         { src: "/scene-work.png", alt: "Camera block helps with meeting reminders and focus" },
         { src: "/scene-bedtime.png", alt: "Sound block creates the perfect sleep environment" },
-        { src: "/scene-blocks.png", alt: "All IoT blocks — camera, mic, sensors, and more" },
       ],
     },
     team: {
@@ -297,7 +296,6 @@ export const dict = {
         { src: "/scene-movie.png", alt: "摄像头块根据你的状态推荐电影" },
         { src: "/scene-work.png", alt: "摄像头块帮你管理会议提醒和专注状态" },
         { src: "/scene-bedtime.png", alt: "声音块打造完美的睡眠环境" },
-        { src: "/scene-blocks.png", alt: "全系列 IoT 积木 — 摄像头、麦克风、传感器等" },
       ],
     },
     team: {
