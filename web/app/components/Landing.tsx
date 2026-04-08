@@ -214,19 +214,22 @@ const moduleImages = [
 
 /* Scene positions: { top, left, width } in % — hand-tuned to match the collage layout */
 const sceneLayout: { top: string; left: string; w: number; z: number }[] = [
-  { top: "0%",  left: "2%",  w: 230, z: 2 },   // 智能烹饪助手
-  { top: "1%",  left: "36%", w: 220, z: 1 },   // 沐浴语音助手
-  { top: "2%",  left: "68%", w: 220, z: 3 },   // 睡眠健康监测
-  { top: "20%", left: "5%",  w: 220, z: 2 },   // 宝宝远程看护
-  { top: "22%", left: "38%", w: 210, z: 1 },   // 情绪感知调节
-  { top: "19%", left: "70%", w: 220, z: 3 },   // 影片智能推荐
-  { top: "40%", left: "0%",  w: 230, z: 2 },   // 语音食谱计时
-  { top: "42%", left: "34%", w: 220, z: 1 },   // 睡眠质量闹钟
-  { top: "41%", left: "66%", w: 220, z: 3 },   // 氛围音乐灯光
-  { top: "60%", left: "3%",  w: 220, z: 2 },   // 会议日程提醒
-  { top: "62%", left: "36%", w: 210, z: 1 },   // 助眠建议闹钟
-  { top: "59%", left: "68%", w: 220, z: 3 },   // 幼儿玩耍提醒
-  { top: "78%", left: "20%", w: 230, z: 2 },   // 阳台空气质量
+  // Row 1 — 5 images
+  { top: "0%",  left: "0%",  w: 200, z: 2 },   // 智能烹饪助手
+  { top: "2%",  left: "22%", w: 170, z: 1 },   // 沐浴语音助手
+  { top: "1%",  left: "42%", w: 210, z: 3 },   // 睡眠健康监测
+  { top: "3%",  left: "64%", w: 160, z: 2 },   // 宝宝远程看护
+  { top: "0%",  left: "82%", w: 180, z: 1 },   // 情绪感知调节
+  // Row 2 — 4 images
+  { top: "34%", left: "2%",  w: 180, z: 3 },   // 影片智能推荐
+  { top: "36%", left: "24%", w: 210, z: 1 },   // 语音食谱计时
+  { top: "33%", left: "50%", w: 170, z: 2 },   // 睡眠质量闹钟
+  { top: "35%", left: "72%", w: 200, z: 3 },   // 氛围音乐灯光
+  // Row 3 — 4 images
+  { top: "66%", left: "0%",  w: 190, z: 2 },   // 会议日程提醒
+  { top: "68%", left: "22%", w: 170, z: 1 },   // 助眠建议闹钟
+  { top: "65%", left: "46%", w: 210, z: 3 },   // 幼儿玩耍提醒
+  { top: "67%", left: "72%", w: 180, z: 2 },   // 阳台空气质量
 ];
 
 const sensorPositions: { top: string; left: string }[] = [
@@ -247,7 +250,7 @@ function SceneCollage({ scenes }: { scenes: { src: string; alt: string }[] }) {
     <>
       {/* Desktop: scattered collage */}
       <div className="hidden lg:block">
-        <div className="relative mx-auto" style={{ maxWidth: 900, height: 1400 }}>
+        <div className="relative mx-auto" style={{ maxWidth: 960, height: 720 }}>
           {/* Scene images at various sizes and positions */}
           {scenes.map((scene, i) => {
             const pos = sceneLayout[i] || sceneLayout[0];
