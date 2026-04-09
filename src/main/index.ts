@@ -73,6 +73,8 @@ const historyRowsPerMemoryRun = Math.max(
 )
 let pendingHistoryRowsForMemoryPipeline = 0
 let memoryPipelineRunning = false
+let agentMemorySyncPending = false
+let agentMemorySyncRunning = false
 type WebSocketConnection = { send: (data: string) => void }
 const BunRuntime = globalThis as unknown as {
   Bun: {
@@ -135,6 +137,29 @@ async function runMemoryPipelineIfNeeded(): Promise<void> {
 const unsubscribeHistoryRowsPersisted = history.onRowsPersisted(({ rowCount }) => {
   pendingHistoryRowsForMemoryPipeline += rowCount
   void runMemoryPipelineIfNeeded()
+})
+
+async function syncAgentMemoriesFromEpisodes(): Promise<void> {
+  if (agentMemorySyncRunning) {
+    agentMemorySyncPending = true
+    return
+  }
+
+  agentMemorySyncRunning = true
+  try {
+    do {
+      agentMemorySyncPending = false
+      await agentMemories.runOnce()
+    } while (agentMemorySyncPending)
+  } catch (error) {
+    console.error('[agent-memories] episode-triggered sync failed:', error)
+  } finally {
+    agentMemorySyncRunning = false
+  }
+}
+
+const unsubscribeContextEpisodeChanges = contextEpisodes.onEpisodeChanged(() => {
+  void syncAgentMemoriesFromEpisodes()
 })
 
 async function createSessionRuntime(): Promise<AgentRuntime> {
@@ -266,6 +291,10 @@ app.get('/ready', (c) => {
         pendingHistoryRows: pendingHistoryRowsForMemoryPipeline,
         rowTrigger: historyRowsPerMemoryRun,
         running: memoryPipelineRunning,
+      },
+      agentMemorySync: {
+        pending: agentMemorySyncPending,
+        running: agentMemorySyncRunning,
       },
       mqttBridge: mqttBridge.getStatus(),
       ok: isReady,
@@ -1194,6 +1223,7 @@ function shutdown(): void {
     runtime.destroy()
   }
   unsubscribeHistoryRowsPersisted()
+  unsubscribeContextEpisodeChanges()
   memoryService.destroy()
   galleryDb.close()
   server.stop(true)

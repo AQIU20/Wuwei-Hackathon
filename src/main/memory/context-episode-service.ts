@@ -34,6 +34,13 @@ export interface ContextEpisodeServiceOptions {
   tableName?: string
 }
 
+interface ContextEpisodeChangeEvent {
+  id: string
+  type: 'insert' | 'update'
+}
+
+type EpisodeChangeListener = (event: ContextEpisodeChangeEvent) => void
+
 const DEFAULT_HOME_ID = '__global__'
 
 export class ContextEpisodeService {
@@ -42,6 +49,7 @@ export class ContextEpisodeService {
   private readonly serviceRoleKey: string | null
   private readonly supabaseUrl: string | null
   private readonly tableName: string
+  private readonly changeListeners = new Set<EpisodeChangeListener>()
 
   constructor(options: ContextEpisodeServiceOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch
@@ -60,6 +68,11 @@ export class ContextEpisodeService {
       enabled: this.enabled,
       tableName: this.tableName,
     }
+  }
+
+  onEpisodeChanged(listener: EpisodeChangeListener): () => void {
+    this.changeListeners.add(listener)
+    return () => this.changeListeners.delete(listener)
   }
 
   async listEpisodes(params?: {
@@ -130,6 +143,10 @@ export class ContextEpisodeService {
     if (!created) {
       throw new Error('Supabase context episode insert returned no rows')
     }
+    this.emitChanged({
+      id: created.id,
+      type: 'insert',
+    })
     return created
   }
 
@@ -161,6 +178,11 @@ export class ContextEpisodeService {
       const msg = await res.text()
       throw new Error(`Supabase context episode update failed (${res.status}): ${msg}`)
     }
+
+    this.emitChanged({
+      id,
+      type: 'update',
+    })
   }
 
   private buildHeaders(): Record<string, string> {
@@ -189,5 +211,11 @@ export class ContextEpisodeService {
 
   private normalizeHomeId(homeId?: string | null): string {
     return homeId ?? DEFAULT_HOME_ID
+  }
+
+  private emitChanged(event: ContextEpisodeChangeEvent): void {
+    for (const listener of this.changeListeners) {
+      listener(event)
+    }
   }
 }
