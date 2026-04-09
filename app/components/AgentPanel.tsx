@@ -1067,8 +1067,8 @@ function getLightSummary(
 ): { detail: string; title: string } {
   if (!state || (state.brightness === 0 && state.pattern === null)) {
     return locale === "zh"
-      ? { detail: “等待 Open Call 指令。试试 set_light(mode='warm_white')。”, title: “当前已关闭” }
-      : { detail: “Waiting for Open Call. Try set_light(mode='warm_white').”, title: “Currently off” };
+      ? { detail: "等待 Open Call 指令。试试 set_light(mode='warm_white')。", title: "当前已关闭" }
+      : { detail: "Waiting for Open Call. Try set_light(mode='warm_white').", title: "Currently off" };
   }
 
   if (state.pattern) {
