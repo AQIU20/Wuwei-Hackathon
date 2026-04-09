@@ -184,7 +184,7 @@ export function AgentPanel() {
       try {
         const [epRes, memRes] = await Promise.all([
           fetch(`${AGENT_SERVER_URL}/v1/context-episodes?limit=5`),
-          fetch(`${AGENT_SERVER_URL}/v1/memory/preferences`),
+          fetch(`${AGENT_SERVER_URL}/v1/memories`),
         ]);
         if (cancelled) return;
         if (epRes.ok) {
