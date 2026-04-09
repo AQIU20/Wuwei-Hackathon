@@ -45,6 +45,8 @@ Use get_ai_node_status for direct node status from the current MQTT server when 
 Use get_ai_node_env for direct temperature/humidity reads from helper-script-backed nodes.
 Use set_ai_node_ws2812 and set_ai_node_raw when the user wants to control helper-script-backed WS2812 nodes on the new server.
 Use get_latest_voice_input for the most recent microphone transcript or partial utterance.
+Use get_latest_heart_reading for the newest heart-rate or SpO2 sample from the live store.
+Use analyze_recent_heart_readings for recent heart-rate/SpO2 trends, averages, and ranges from Supabase events.
 Use get_hardware_history for state trends over time.
 Use get_hardware_events for event questions, detections, command responses, ingress tracing, and recent event counts.
 Use analyze_recent_camera_images when the user asks what cameras saw over a recent time window, or when answering requires understanding stored camera images.

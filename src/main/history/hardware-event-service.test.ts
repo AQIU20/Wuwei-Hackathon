@@ -57,6 +57,47 @@ describe('HardwareEventService', () => {
     expect(row?.source).toBe('mqtt')
   })
 
+  it('normalizes hr_* MQTT envelopes as heart_rate_oximeter events', async () => {
+    const requests: Array<{ body?: string; method: string; url: string }> = []
+
+    const service = new HardwareEventService({
+      fetchImpl: async (input, init) => {
+        requests.push({
+          body: typeof init?.body === 'string' ? init.body : undefined,
+          method: init?.method ?? 'GET',
+          url: String(input),
+        })
+
+        return new Response('', { status: 201 })
+      },
+      serviceRoleKey: 'service-role',
+      supabaseUrl: 'https://example.supabase.co',
+      tableName: 'hardware_events',
+    })
+
+    await service.insertMqttEnvelope('aihub/sensor/hr_8fcba4/data', {
+      msg_id: 'msg-hr-123',
+      node_id: 'hr_8fcba4',
+      payload: {
+        bpm: 72,
+        node_type: 'hr',
+        sensor: 'max30102',
+        spo2: 98,
+      },
+      ts: 1_712_345_678_901,
+      type: 'sensor_data',
+      v: 1,
+    })
+
+    expect(requests).toHaveLength(1)
+    const [row] = JSON.parse(requests[0]?.body ?? '[]') as Array<Record<string, unknown>>
+    expect(row?.node_id).toBe('hr_8fcba4')
+    expect(row?.node_type).toBe('hr')
+    expect(row?.capability).toBe('heart_rate_oximeter')
+    expect(row?.scope).toBe('sensor')
+    expect(row?.subject).toBe('data')
+  })
+
   it('can read back a stored event by msg_id', async () => {
     const service = new HardwareEventService({
       fetchImpl: async () =>

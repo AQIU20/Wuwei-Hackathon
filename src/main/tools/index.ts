@@ -3,6 +3,7 @@ import { createAiNodeTools } from './ai-node'
 import { createHardwareEventTools } from './hardware-events'
 import { createHardwareHistoryTools } from './hardware-history'
 import { createHardwareTools } from './hardware'
+import { createHeartRateTools } from './heart-rate'
 import { createCameraVisionTools } from './camera-vision'
 import { createDeviceTools } from './device-tools'
 import { createTavilyTools } from './tavily'
@@ -16,6 +17,7 @@ export function createCustomTools(ctx: ToolContext): ToolDefinition<any, any, an
     ...createHardwareEventTools(ctx.hardwareEvents),
     ...createAiNodeTools(ctx),
     ...createCameraVisionTools(ctx),
+    ...createHeartRateTools(ctx),
     ...createHardwareTools(ctx.cwd, ctx.hardware, ctx.mqttBridge ?? null),
     ...createDeviceTools(ctx.cwd, ctx.hardware, ctx.mqttBridge ?? null),
   ]

@@ -8,6 +8,7 @@ export type AihubNodeType =
   | 'imu'
   | 'pir'
   | 'baro'
+  | 'hr'
   | 'hrox'
   | 'env'
   | 'gas'
@@ -73,6 +74,7 @@ const NODE_TYPE_TO_CAPABILITY: Record<AihubNodeType, string> = {
   cam: 'camera',
   env: 'environment',
   gas: 'air_quality',
+  hr: 'heart_rate_oximeter',
   hrox: 'heart_rate_oximeter',
   imu: 'imu',
   led: 'light',
@@ -87,6 +89,7 @@ function inferNodeType(nodeId: string, payload?: Record<string, unknown>): Aihub
     case 'imu':
     case 'pir':
     case 'baro':
+    case 'hr':
     case 'hrox':
     case 'env':
     case 'gas':

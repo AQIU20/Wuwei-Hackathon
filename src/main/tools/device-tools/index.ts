@@ -11,6 +11,7 @@ import { isHelperBackedNodeId, runHelperLightAction } from '../ai-node'
 
 interface DeviceDefinition {
   blockId: string
+  kind: 'light' | 'sensor'
   label: string        // 自然语言名称，Agent 用这个匹配用户意图
   description: string  // 描述这个设备是什么、在哪
 }
@@ -19,13 +20,21 @@ interface DeviceDefinition {
 const DEVICE_DEFINITIONS: DeviceDefinition[] = [
   {
     blockId: 'led_fd8480',
+    kind: 'light',
     label: '桌面上的灯',
     description: '放在桌面上的 WS2812 LED 灯条，可以控制颜色、亮度和动态效果',
   },
   {
     blockId: 'heap_c13de8',
+    kind: 'light',
     label: '环形灯模块',
     description: '环形 WS2812 灯模块，可以控制开关、颜色、亮度和动态效果',
+  },
+  {
+    blockId: 'hr_8fcba4',
+    kind: 'sensor',
+    label: '心率血氧传感器',
+    description: '可穿戴心率和血氧传感器，返回 bpm、SpO2、血压与体温等读数',
   },
 ]
 // ────────────────────────────────────────────────────────────────────────────
@@ -273,6 +282,8 @@ export function createDeviceTools(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): ToolDefinition<any, any, any>[] {
   return DEVICE_DEFINITIONS.map((def) =>
-    createLightTool(def.blockId, def.label, def.description, cwd, hardware, mqttBridge),
+    def.kind === 'light'
+      ? createLightTool(def.blockId, def.label, def.description, cwd, hardware, mqttBridge)
+      : createSensorTool(def.blockId, def.label, def.description, hardware),
   )
 }

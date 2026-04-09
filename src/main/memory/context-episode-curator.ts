@@ -258,6 +258,7 @@ function buildMockEpisodesFromEvents(
     .filter(
       (event) =>
         event.capability === 'heart_rate_oximeter' ||
+        event.nodeType === 'hr' ||
         event.nodeType === 'hrox' ||
         typeof event.payload.bpm === 'number',
     )
