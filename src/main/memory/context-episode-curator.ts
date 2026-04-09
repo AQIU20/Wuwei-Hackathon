@@ -390,7 +390,11 @@ export class ContextEpisodeCurator {
       }
 
       if (rawCandidates.length === 0) {
-        rawCandidates = buildMockEpisodesFromEvents(events.samples, recentEpisodes, this.maxEpisodes)
+        rawCandidates = buildMockEpisodesFromEvents(
+          events.samples,
+          recentEpisodes,
+          this.maxEpisodes,
+        )
       }
 
       const candidates = rawCandidates
