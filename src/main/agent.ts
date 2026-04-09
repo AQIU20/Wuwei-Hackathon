@@ -41,9 +41,13 @@ block_id, capability, and MQTT routing — they are more reliable.
 
 Use list_blocks to discover available hardware.
 Use get_sensor_data for current readings.
+Use get_ai_node_status for direct node status from the current MQTT server when the user asks about nodes like heap_c13de8 or led_fd8480.
+Use get_ai_node_env for direct temperature/humidity reads from helper-script-backed nodes.
+Use set_ai_node_ws2812 and set_ai_node_raw when the user wants to control helper-script-backed WS2812 nodes on the new server.
 Use get_latest_voice_input for the most recent microphone transcript or partial utterance.
 Use get_hardware_history for state trends over time.
 Use get_hardware_events for event questions, detections, command responses, ingress tracing, and recent event counts.
+Use analyze_recent_camera_images when the user asks what cameras saw over a recent time window, or when answering requires understanding stored camera images.
 When the user asks to control a device by name (e.g. "桌面上的灯", "desk light"), look for a
 device-specific tool whose label matches, then call it directly.
 Supported light actions: "on", "off", "set_color" (with r,g,b,brightness), "set_pattern" (breathing/strobe/rainbow/steady/siri/particles).`
@@ -377,12 +381,14 @@ export class AgentRuntime {
 
     const tools = createCodingTools(this.options.cwd)
     const customTools = createCustomTools({
+      configService: this.options.configService,
       cwd: this.options.cwd,
       getWebSearchConfig: () => this.options.configService.getWebSearchConfig(),
       hardware: this.options.hardware,
       hardwareEvents: this.options.hardwareEvents ?? null,
       history: this.options.history ?? null,
       mqttBridge: this.options.mqttBridge ?? null,
+      registry: this.options.registry,
     })
 
     const resourceLoader = new DefaultResourceLoader({

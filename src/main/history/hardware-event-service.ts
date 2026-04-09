@@ -17,6 +17,12 @@ interface HardwareEventServiceOptions {
   tableName?: string
 }
 
+interface HardwareEventPersistEvent {
+  rowCount: number
+}
+
+type PersistListener = (event: HardwareEventPersistEvent) => void
+
 export interface HardwareEventSample {
   capability: string | null
   confidence: number | null
@@ -66,6 +72,7 @@ export class HardwareEventService {
   private readonly serviceRoleKey: string | null
   private readonly supabaseUrl: string | null
   private readonly tableName: string
+  private readonly persistListeners = new Set<PersistListener>()
 
   constructor(options: HardwareEventServiceOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch
@@ -85,6 +92,11 @@ export class HardwareEventService {
       enabled: this.enabled,
       tableName: this.tableName,
     }
+  }
+
+  onRowsPersisted(listener: PersistListener): () => void {
+    this.persistListeners.add(listener)
+    return () => this.persistListeners.delete(listener)
   }
 
   async insertMqttEnvelope(
@@ -260,6 +272,10 @@ export class HardwareEventService {
       }
       throw new Error(`Supabase insert failed (${response.status}): ${message}`)
     }
+
+    this.emitPersisted({
+      rowCount: rows.length,
+    })
   }
 
   private buildHeaders(): Record<string, string> {
@@ -284,5 +300,11 @@ export class HardwareEventService {
     }
 
     return this.serviceRoleKey
+  }
+
+  private emitPersisted(event: HardwareEventPersistEvent): void {
+    for (const listener of this.persistListeners) {
+      listener(event)
+    }
   }
 }

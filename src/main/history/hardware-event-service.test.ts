@@ -204,4 +204,55 @@ describe('HardwareEventService', () => {
     expect(row?.signal_name).toBe('triggered_snapshot')
     expect(row?.source).toBe('direct_camera_ingress')
   })
+
+  it('emits persisted row counts after a successful hardware event write', async () => {
+    const emitted: Array<{ rowCount: number }> = []
+
+    const service = new HardwareEventService({
+      fetchImpl: async () => new Response('', { status: 201 }),
+      serviceRoleKey: 'service-role',
+      supabaseUrl: 'https://example.supabase.co',
+      tableName: 'hardware_events',
+    })
+
+    service.onRowsPersisted((event) => {
+      emitted.push(event)
+    })
+
+    await service.insertMqttEnvelopes([
+      {
+        topic: 'aihub/sensor/env_hello01/data',
+        envelope: {
+          msg_id: 'msg-evt-1',
+          node_id: 'env_hello01',
+          payload: {
+            humidity_pct: 51.2,
+            node_type: 'env',
+            sensor: 'environment',
+            temp_c: 24.3,
+          },
+          ts: 1_712_345_678_901,
+          type: 'sensor_data',
+          v: 1,
+        },
+      },
+      {
+        topic: 'aihub/event/mic_01/transcript',
+        envelope: {
+          msg_id: 'msg-evt-2',
+          node_id: 'mic_01',
+          payload: {
+            node_type: 'mic',
+            text: 'turn on the light',
+            trigger: true,
+          },
+          ts: 1_712_345_678_902,
+          type: 'voice_transcript_final',
+          v: 1,
+        },
+      },
+    ])
+
+    expect(emitted).toEqual([{ rowCount: 2 }])
+  })
 })

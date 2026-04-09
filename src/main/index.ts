@@ -67,11 +67,15 @@ const mqttBridge = new AihubMqttBridge({
 const sessions = new Map<string, AgentRuntime>()
 const voiceSessionByNode = new Map<string, string>()
 const seenVoiceUtterances = new Map<string, number>()
-const historyRowsPerMemoryRun = Math.max(
+const hardwareEventRowsPerMemoryRun = Math.max(
   1,
-  Number(process.env.MEMORY_PIPELINE_HISTORY_ROW_TRIGGER || 10),
+  Number(
+    process.env.MEMORY_PIPELINE_EVENT_ROW_TRIGGER ||
+      process.env.MEMORY_PIPELINE_HISTORY_ROW_TRIGGER ||
+      10,
+  ),
 )
-let pendingHistoryRowsForMemoryPipeline = 0
+let pendingHardwareEventRowsForMemoryPipeline = 0
 let memoryPipelineRunning = false
 let agentMemorySyncPending = false
 let agentMemorySyncRunning = false
@@ -114,28 +118,28 @@ hardware.subscribe((event) => {
 
 async function runMemoryPipelineIfNeeded(): Promise<void> {
   if (memoryPipelineRunning) return
-  if (pendingHistoryRowsForMemoryPipeline < historyRowsPerMemoryRun) return
+  if (pendingHardwareEventRowsForMemoryPipeline < hardwareEventRowsPerMemoryRun) return
 
   memoryPipelineRunning = true
   try {
-    while (pendingHistoryRowsForMemoryPipeline >= historyRowsPerMemoryRun) {
-      pendingHistoryRowsForMemoryPipeline -= historyRowsPerMemoryRun
+    while (pendingHardwareEventRowsForMemoryPipeline >= hardwareEventRowsPerMemoryRun) {
+      pendingHardwareEventRowsForMemoryPipeline -= hardwareEventRowsPerMemoryRun
       await contextEpisodeCurator.runOnce()
       await agentMemories.runOnce()
     }
   } catch (error) {
-    pendingHistoryRowsForMemoryPipeline += historyRowsPerMemoryRun
+    pendingHardwareEventRowsForMemoryPipeline += hardwareEventRowsPerMemoryRun
     console.error('[memory-pipeline] trigger run failed:', error)
   } finally {
     memoryPipelineRunning = false
-    if (pendingHistoryRowsForMemoryPipeline >= historyRowsPerMemoryRun) {
+    if (pendingHardwareEventRowsForMemoryPipeline >= hardwareEventRowsPerMemoryRun) {
       void runMemoryPipelineIfNeeded()
     }
   }
 }
 
-const unsubscribeHistoryRowsPersisted = history.onRowsPersisted(({ rowCount }) => {
-  pendingHistoryRowsForMemoryPipeline += rowCount
+const unsubscribeHardwareEventRowsPersisted = hardwareEvents.onRowsPersisted(({ rowCount }) => {
+  pendingHardwareEventRowsForMemoryPipeline += rowCount
   void runMemoryPipelineIfNeeded()
 })
 
@@ -288,8 +292,8 @@ app.get('/ready', (c) => {
       contextEpisodeCurator: contextEpisodeCurator.getStatus(),
       agentMemories: agentMemories.getStatus(),
       memoryPipeline: {
-        pendingHistoryRows: pendingHistoryRowsForMemoryPipeline,
-        rowTrigger: historyRowsPerMemoryRun,
+        pendingHardwareEventRows: pendingHardwareEventRowsForMemoryPipeline,
+        rowTrigger: hardwareEventRowsPerMemoryRun,
         running: memoryPipelineRunning,
       },
       agentMemorySync: {
@@ -1227,6 +1231,8 @@ if (mqttHardwareMode && mqttBridge.isEnabled()) {
   })
 }
 
+contextEpisodeCurator.start()
+
 const server = BunRuntime.Bun.serve({
   fetch: app.fetch,
   port,
@@ -1262,7 +1268,8 @@ function shutdown(): void {
   for (const runtime of sessions.values()) {
     runtime.destroy()
   }
-  unsubscribeHistoryRowsPersisted()
+  contextEpisodeCurator.stop()
+  unsubscribeHardwareEventRowsPersisted()
   unsubscribeContextEpisodeChanges()
   memoryService.destroy()
   galleryDb.close()
