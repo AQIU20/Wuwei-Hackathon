@@ -143,7 +143,7 @@ describe('createCameraVisionTools', () => {
     expect(capturedContent[2]?.type).toBe('image')
   })
 
-  it('samples at most 10 images across the requested time window', async () => {
+  it('limits the query and model payload to at most 10 recent images for lower latency', async () => {
     const registration = registerFauxProvider({
       api: 'faux-camera-sampling-test',
       models: [{ id: 'vision-test', input: ['text', 'image'] }],
@@ -157,7 +157,7 @@ describe('createCameraVisionTools', () => {
         capturedContent = context.messages[0]?.content
         return fauxAssistantMessage(
           JSON.stringify({
-            answer: 'Sampled 10 images across the full window.',
+            answer: 'Sent only the latest 10 images.',
             confidence: 0.88,
           }),
         )
@@ -234,14 +234,13 @@ describe('createCameraVisionTools', () => {
 
     expect(result.isError).toBeUndefined()
     expect(result.content[0]?.text).toContain('Images analyzed: 10')
-    expect(result.content[0]?.text).toContain('Images available in window: 25')
     expect(capturedContent).toHaveLength(11)
     expect(capturedContent.filter((item) => item.type === 'image')).toHaveLength(10)
 
     const metadata = JSON.parse(capturedContent[0]?.text ?? '{}')
     expect(metadata.image_count).toBe(10)
-    expect(metadata.sampled_from_image_count).toBe(25)
+    expect(metadata.sampling_strategy).toBe('latest_images_latency_optimized')
     expect(metadata.images[0]?.msg_id).toBe('camera-1')
-    expect(metadata.images[9]?.msg_id).toBe('camera-25')
+    expect(metadata.images[9]?.msg_id).toBe('camera-10')
   })
 })

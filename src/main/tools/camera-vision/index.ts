@@ -9,7 +9,6 @@ import type { ToolContext } from '../types'
 const DEFAULT_LOOKBACK_MINUTES = 10
 const DEFAULT_MAX_IMAGES = 10
 const MAX_IMAGES = 10
-const MAX_QUERY_IMAGES = 200
 
 const analyzeRecentCameraImagesSchema = Type.Object({
   question: Type.String({
@@ -134,37 +133,6 @@ function hasImagePayload(sample: HardwareEventSample): boolean {
   return Boolean(toNonEmptyString(payload.image_base64))
 }
 
-function sortByRecordedAtAsc(samples: HardwareEventSample[]): HardwareEventSample[] {
-  return [...samples].sort((left, right) => {
-    const leftTime = Date.parse(left.recordedAt)
-    const rightTime = Date.parse(right.recordedAt)
-    return leftTime - rightTime
-  })
-}
-
-function selectEvenlyDistributedSamples(
-  samples: HardwareEventSample[],
-  maxSamples: number,
-): HardwareEventSample[] {
-  if (samples.length <= maxSamples) {
-    return sortByRecordedAtAsc(samples)
-  }
-
-  const ordered = sortByRecordedAtAsc(samples)
-  const lastIndex = ordered.length - 1
-  const selected: HardwareEventSample[] = []
-  let previousIndex = -1
-
-  for (let i = 0; i < maxSamples; i += 1) {
-    const targetIndex = Math.round((i * lastIndex) / (maxSamples - 1))
-    const index = Math.max(targetIndex, previousIndex + 1)
-    selected.push(ordered[Math.min(index, lastIndex)] as HardwareEventSample)
-    previousIndex = index
-  }
-
-  return selected
-}
-
 function resolveModelAuth(ctx: ToolContext): { apiKey: string; model: Model<Api> } | null {
   const activeModelId = ctx.configService.getActiveModelId()
   if (!activeModelId) return null
@@ -241,17 +209,16 @@ export function createCameraVisionTools(
 
         const events = await ctx.hardwareEvents.queryEvents({
           capability: 'camera',
-          limit: MAX_QUERY_IMAGES,
+          limit: maxImages,
           minutes: lookbackMinutes,
           nodeId: params.node_id,
           scope: 'vision',
           type: 'camera_snapshot_final',
         })
 
-        const imageEvents = events.samples.filter(hasImagePayload)
-        const selectedImageEvents = selectEvenlyDistributedSamples(imageEvents, maxImages)
+        const imageEvents = events.samples.filter(hasImagePayload).slice(0, maxImages)
 
-        if (selectedImageEvents.length === 0) {
+        if (imageEvents.length === 0) {
           return {
             content: [
               {
@@ -271,10 +238,9 @@ export function createCameraVisionTools(
             type: 'text',
             text: JSON.stringify(
               {
-                image_count: selectedImageEvents.length,
-                sampled_from_image_count: imageEvents.length,
-                sampling_strategy: 'evenly_distributed_over_time_window',
-                images: selectedImageEvents.map(buildEventSummary),
+                image_count: imageEvents.length,
+                sampling_strategy: 'latest_images_latency_optimized',
+                images: imageEvents.map(buildEventSummary),
                 question: params.question,
               },
               null,
@@ -283,7 +249,7 @@ export function createCameraVisionTools(
           },
         ]
 
-        for (const sample of selectedImageEvents) {
+        for (const sample of imageEvents) {
           const payload = sample.payload as Record<string, unknown>
           messageContent.push({
             type: 'image',
@@ -325,7 +291,7 @@ export function createCameraVisionTools(
                   .join(' | '),
               )
               .join('\n')
-          : selectedImageEvents
+          : imageEvents
               .map((sample) => {
                 const summary = buildEventSummary(sample)
                 return [
@@ -354,8 +320,7 @@ export function createCameraVisionTools(
                 answerText || 'The camera analysis completed but returned no answer text.',
                 confidenceText,
                 reasoningText,
-                `Images analyzed: ${selectedImageEvents.length}`,
-                `Images available in window: ${imageEvents.length}`,
+                `Images analyzed: ${imageEvents.length}`,
                 'Evidence:',
                 evidence,
               ]
