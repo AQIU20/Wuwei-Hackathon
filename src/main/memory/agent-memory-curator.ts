@@ -1,9 +1,9 @@
 import type { Api, Model } from '@mariozechner/pi-ai'
 import { complete } from '@mariozechner/pi-ai'
-import type { HardwareEventSample, HardwareEventService } from '../history/hardware-event-service'
 import type { ConfigService } from '../providers/config-service'
 import type { ProviderRegistry } from '../providers/registry'
 import { parseModelKey } from '../providers/types'
+import type { ContextEpisodeRow, ContextEpisodeService } from './context-episode-service'
 import type { AgentMemoryRow, SupabaseMemoryService } from './supabase-memory-service'
 
 interface CuratedMemoryCandidate {
@@ -13,6 +13,7 @@ interface CuratedMemoryCandidate {
   memory_type?: string
   memory_value?: string
   reason?: string | null
+  source_episode_ids?: string[]
 }
 
 interface CuratorResult {
@@ -20,8 +21,8 @@ interface CuratorResult {
 }
 
 interface AgentMemoryCuratorOptions {
+  contextEpisodes: ContextEpisodeService
   configService: ConfigService
-  hardwareEvents: HardwareEventService
   intervalMs?: number
   maxMemories?: number
   minutes?: number
@@ -29,18 +30,18 @@ interface AgentMemoryCuratorOptions {
   supabaseMemory: SupabaseMemoryService
 }
 
-const CURATOR_PROMPT = `You create long-term agent memories from recent smart-home / wearable hardware events.
+const CURATOR_PROMPT = `You create long-term agent memories from recent smart-home / wearable context episodes.
 
 The input contains:
-- recent hardware events from the last time window
+- recent context episodes from the last time window
 - current active memories
 
 Your job:
-- infer only stable, useful user memories from hardware behavior and environment patterns
+- infer only stable, useful user memories from repeated context episodes
 - use plain natural language for memory_value
 - prefer memories like sleep schedule, lighting preference, health pattern, sedentary routine, comfort zone, air quality sensitivity
-- do not output raw event summaries or one-off incidents
-- do not invent facts that are not supported by the events
+- do not output raw episode summaries or one-off incidents
+- do not invent facts that are not supported by the episodes
 - if evidence is too weak, return fewer memories
 - reuse an existing memory_key when updating the same semantic memory
 
@@ -59,6 +60,7 @@ Return JSON only in this shape:
       "memory_value": "Usually falls asleep around 11:30pm and wakes around 7:30am.",
       "confidence": 0.91,
       "evidence_count": 14,
+      "source_episode_ids": ["episode-1", "episode-2"],
       "reason": "Repeated overnight low-activity and wake transitions across multiple days."
     }
   ]
@@ -69,6 +71,7 @@ Rules:
 - memory_key must be short, stable, snake_case
 - confidence must be between 0 and 1
 - evidence_count must be a positive integer
+- source_episode_ids should point to the strongest supporting episodes when available
 - if nothing is strong enough, return {"memories":[]}`
 
 function clampConfidence(value: number | undefined): number {
@@ -111,21 +114,60 @@ function normalizeMemoryKey(value: string | undefined, fallbackValue: string): s
   return normalized || `memory_${Date.now()}`
 }
 
-function compactEvent(sample: HardwareEventSample): Record<string, unknown> {
+function compactEpisode(sample: ContextEpisodeRow): Record<string, unknown> {
   return {
-    capability: sample.capability,
-    eventTsMs: sample.eventTsMs,
-    nodeId: sample.nodeId,
-    nodeType: sample.nodeType,
-    payload: sample.payload,
-    recordedAt: sample.recordedAt,
-    scope: sample.scope,
-    status: sample.status,
-    subject: sample.subject,
-    success: sample.success,
-    topic: sample.topic,
-    type: sample.type,
+    confidence: sample.confidence,
+    context_type: sample.context_type,
+    end_at: sample.end_at,
+    evidence: sample.evidence,
+    id: sample.id,
+    room_id: sample.room_id,
+    source: sample.source,
+    start_at: sample.start_at,
+    summary: sample.summary,
   }
+}
+
+function buildMockMemoriesFromEpisodes(
+  episodes: ContextEpisodeRow[],
+  existing: AgentMemoryRow[],
+  maxMemories: number,
+): CuratedMemoryCandidate[] {
+  const heartEpisodes = episodes.filter(
+    (episode) => episode.context_type === 'resting_heart_monitoring',
+  )
+  if (heartEpisodes.length === 0) return []
+  if (existing.some((item) => item.memory_key === 'resting_heart_rate_baseline')) return []
+
+  const avgBpmValues = heartEpisodes
+    .map((episode) => {
+      const value = episode.evidence?.avg_bpm
+      return typeof value === 'number' && Number.isFinite(value) ? value : null
+    })
+    .filter((value): value is number => value !== null)
+  const avgSpo2Values = heartEpisodes
+    .map((episode) => {
+      const value = episode.evidence?.avg_spo2
+      return typeof value === 'number' && Number.isFinite(value) ? value : null
+    })
+    .filter((value): value is number => value !== null)
+
+  const avgBpm =
+    avgBpmValues.reduce((sum, value) => sum + value, 0) / Math.max(1, avgBpmValues.length)
+  const avgSpo2 =
+    avgSpo2Values.reduce((sum, value) => sum + value, 0) / Math.max(1, avgSpo2Values.length)
+
+  return [
+    {
+      confidence: 0.84,
+      evidence_count: heartEpisodes.length,
+      memory_key: 'resting_heart_rate_baseline',
+      memory_type: 'health',
+      memory_value: `Recent resting heart-rate observations repeatedly stayed around ${Math.round(avgBpm)} bpm with oxygen saturation near ${Math.round(avgSpo2)}%.`,
+      reason: 'Repeated resting heart monitoring episodes suggest a stable short-term baseline.',
+      source_episode_ids: heartEpisodes.map((episode) => episode.id),
+    },
+  ].slice(0, maxMemories)
 }
 
 export class AgentMemoryCurator {
@@ -138,8 +180,7 @@ export class AgentMemoryCurator {
   constructor(private options: AgentMemoryCuratorOptions) {
     this.intervalMs = options.intervalMs ?? Number(process.env.AGENT_MEMORY_INTERVAL_MS || 60_000)
     this.maxMemories = options.maxMemories ?? Number(process.env.AGENT_MEMORY_MAX_ITEMS || 6)
-    this.minutes =
-      options.minutes ?? Number(process.env.AGENT_MEMORY_WINDOW_MINUTES || 60 * 24 * 3)
+    this.minutes = options.minutes ?? Number(process.env.AGENT_MEMORY_WINDOW_MINUTES || 60 * 24 * 3)
   }
 
   start(): void {
@@ -162,7 +203,7 @@ export class AgentMemoryCurator {
 
   getStatus() {
     return {
-      enabled: this.options.hardwareEvents.isEnabled() && this.options.supabaseMemory.isEnabled(),
+      enabled: this.options.contextEpisodes.isEnabled() && this.options.supabaseMemory.isEnabled(),
       intervalMs: this.intervalMs,
       maxMemories: this.maxMemories,
       minutes: this.minutes,
@@ -172,23 +213,24 @@ export class AgentMemoryCurator {
 
   async runOnce(): Promise<void> {
     if (this.running) return
-    if (!this.options.hardwareEvents.isEnabled()) return
+    if (!this.options.contextEpisodes.isEnabled()) return
     if (!this.options.supabaseMemory.isEnabled()) return
 
-    const auth = this.resolveModelAuth()
-    if (!auth) return
+    const mockMode = process.env.MEMORY_CURATOR_MOCK === 'true'
+    const auth = mockMode ? null : this.resolveModelAuth()
+    if (!mockMode && !auth) return
 
     this.running = true
     try {
-      const [events, existing] = await Promise.all([
-        this.options.hardwareEvents.queryEvents({
-          limit: 180,
+      const [episodes, existing] = await Promise.all([
+        this.options.contextEpisodes.listEpisodes({
+          limit: 120,
           minutes: this.minutes,
         }),
         this.options.supabaseMemory.listMemories(),
       ])
 
-      if (events.samples.length < 5) return
+      if ((!mockMode && episodes.length < 3) || (mockMode && episodes.length < 1)) return
 
       const promptPayload = {
         currentTime: new Date().toISOString(),
@@ -199,29 +241,41 @@ export class AgentMemoryCurator {
           memory_type: item.memory_type,
           memory_value: item.memory_value,
           reason: item.reason,
+          source_episode_ids: item.source_episode_ids,
         })),
-        recentHardwareEvents: events.samples.map(compactEvent),
+        recentContextEpisodes: episodes.map(compactEpisode),
       }
 
-      const response = await complete(
-        auth.model,
-        {
-          systemPrompt: CURATOR_PROMPT,
-          messages: [
-            {
-              role: 'user',
-              content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
-              timestamp: Date.now(),
-            },
-          ],
-        },
-        {
-          apiKey: auth.apiKey,
-        },
-      )
+      let rawCandidates: CuratedMemoryCandidate[] = []
+      if (mockMode) {
+        rawCandidates = buildMockMemoriesFromEpisodes(episodes, existing, this.maxMemories)
+      } else {
+        const liveAuth = auth
+        if (!liveAuth) return
+        rawCandidates =
+          safeJsonParse<CuratorResult>(
+            extractTextFromResponse(
+              await complete(
+                liveAuth.model,
+                {
+                  systemPrompt: CURATOR_PROMPT,
+                  messages: [
+                    {
+                      role: 'user',
+                      content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
+                      timestamp: Date.now(),
+                    },
+                  ],
+                },
+                {
+                  apiKey: liveAuth.apiKey,
+                },
+              ),
+            ),
+          )?.memories ?? []
+      }
 
-      const parsed = safeJsonParse<CuratorResult>(extractTextFromResponse(response))
-      const candidates = (parsed?.memories ?? [])
+      const candidates = rawCandidates
         .slice(0, this.maxMemories)
         .map((item) => {
           const value = item.memory_value?.trim()
@@ -233,6 +287,12 @@ export class AgentMemoryCurator {
             memory_type: normalizeMemoryType(item.memory_type),
             memory_value: value,
             reason: item.reason?.trim() || null,
+            source_episode_ids: Array.isArray(item.source_episode_ids)
+              ? item.source_episode_ids
+                  .map((episodeId) => String(episodeId).trim())
+                  .filter((episodeId) => episodeId.length > 0)
+                  .slice(0, 12)
+              : [],
           }
         })
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
@@ -240,8 +300,8 @@ export class AgentMemoryCurator {
       if (candidates.length === 0) return
 
       const latestObservedAt =
-        events.samples[0]?.recordedAt ??
-        new Date(Math.max(...events.samples.map((sample) => sample.eventTsMs))).toISOString()
+        episodes[0]?.end_at ??
+        new Date(Math.max(...episodes.map((sample) => Date.parse(sample.end_at)))).toISOString()
 
       for (const item of candidates) {
         await this.options.supabaseMemory.upsertMemory({
@@ -252,6 +312,7 @@ export class AgentMemoryCurator {
           confidence: item.confidence,
           evidence_count: item.evidence_count,
           last_observed_at: latestObservedAt,
+          source_episode_ids: item.source_episode_ids,
           reason: item.reason,
           status: 'active',
         })

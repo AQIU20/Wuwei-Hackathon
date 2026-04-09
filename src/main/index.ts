@@ -11,6 +11,8 @@ import { type HardwareIngressMessage, HardwareStore } from './hardware/store'
 import { HardwareEventService } from './history/hardware-event-service'
 import { SupabaseHistoryService } from './history/supabase-history-service'
 import { AgentMemoryCurator } from './memory/agent-memory-curator'
+import { ContextEpisodeCurator } from './memory/context-episode-curator'
+import { ContextEpisodeService } from './memory/context-episode-service'
 import { PreferenceMemoryService } from './memory/preference-memory-service'
 import { SupabaseMemoryService } from './memory/supabase-memory-service'
 import { ConfigService } from './providers/config-service'
@@ -23,6 +25,7 @@ configService.init()
 
 const registry = new ProviderRegistry(configService)
 const supabaseMemory = new SupabaseMemoryService()
+const contextEpisodes = new ContextEpisodeService()
 const memoryService = new PreferenceMemoryService(
   join(paths.memoryDir, 'preferences.sqlite'),
   supabaseMemory,
@@ -45,9 +48,15 @@ try {
   /* column already exists */
 }
 const hardwareEvents = new HardwareEventService()
-const agentMemories = new AgentMemoryCurator({
+const contextEpisodeCurator = new ContextEpisodeCurator({
   configService,
+  contextEpisodes,
   hardwareEvents,
+  registry,
+})
+const agentMemories = new AgentMemoryCurator({
+  contextEpisodes,
+  configService,
   registry,
   supabaseMemory,
 })
@@ -58,6 +67,12 @@ const mqttBridge = new AihubMqttBridge({
 const sessions = new Map<string, AgentRuntime>()
 const voiceSessionByNode = new Map<string, string>()
 const seenVoiceUtterances = new Map<string, number>()
+const historyRowsPerMemoryRun = Math.max(
+  1,
+  Number(process.env.MEMORY_PIPELINE_HISTORY_ROW_TRIGGER || 10),
+)
+let pendingHistoryRowsForMemoryPipeline = 0
+let memoryPipelineRunning = false
 type WebSocketConnection = { send: (data: string) => void }
 const BunRuntime = globalThis as unknown as {
   Bun: {
@@ -93,6 +108,33 @@ hardware.subscribe((event) => {
       console.error('[history] persist snapshot failed:', error)
     })
   }
+})
+
+async function runMemoryPipelineIfNeeded(): Promise<void> {
+  if (memoryPipelineRunning) return
+  if (pendingHistoryRowsForMemoryPipeline < historyRowsPerMemoryRun) return
+
+  memoryPipelineRunning = true
+  try {
+    while (pendingHistoryRowsForMemoryPipeline >= historyRowsPerMemoryRun) {
+      pendingHistoryRowsForMemoryPipeline -= historyRowsPerMemoryRun
+      await contextEpisodeCurator.runOnce()
+      await agentMemories.runOnce()
+    }
+  } catch (error) {
+    pendingHistoryRowsForMemoryPipeline += historyRowsPerMemoryRun
+    console.error('[memory-pipeline] trigger run failed:', error)
+  } finally {
+    memoryPipelineRunning = false
+    if (pendingHistoryRowsForMemoryPipeline >= historyRowsPerMemoryRun) {
+      void runMemoryPipelineIfNeeded()
+    }
+  }
+}
+
+const unsubscribeHistoryRowsPersisted = history.onRowsPersisted(({ rowCount }) => {
+  pendingHistoryRowsForMemoryPipeline += rowCount
+  void runMemoryPipelineIfNeeded()
 })
 
 async function createSessionRuntime(): Promise<AgentRuntime> {
@@ -151,6 +193,22 @@ interface CameraIngressBody {
   scene?: string | null
 }
 
+interface HeartRateIngressBody {
+  battery?: number | null
+  bpm?: number | null
+  chip?: string
+  confidence?: number | null
+  diastolic_mm_hg?: number | null
+  event_id?: string
+  firmware?: string
+  node_id?: string
+  spo2?: number | null
+  systolic_mm_hg?: number | null
+  temperature_c?: number | null
+  timestamp_ms?: number
+  trace_id?: string
+}
+
 function pruneSeenVoiceUtterances(now = Date.now()): void {
   const ttlMs = 6 * 60 * 60 * 1000
   for (const [key, seenAt] of seenVoiceUtterances.entries()) {
@@ -201,7 +259,14 @@ app.get('/ready', (c) => {
       hardwareMode,
       history: history?.getStatus() ?? { enabled: false, mode: hardwareMode, tableName: null },
       hardwareEvents: hardwareEvents.getStatus(),
+      contextEpisodes: contextEpisodes.getStatus(),
+      contextEpisodeCurator: contextEpisodeCurator.getStatus(),
       agentMemories: agentMemories.getStatus(),
+      memoryPipeline: {
+        pendingHistoryRows: pendingHistoryRowsForMemoryPipeline,
+        rowTrigger: historyRowsPerMemoryRun,
+        running: memoryPipelineRunning,
+      },
       mqttBridge: mqttBridge.getStatus(),
       ok: isReady,
       workspace: paths.cwd,
@@ -315,6 +380,36 @@ app.get('/v1/hardware-events', async (c) => {
     return c.json(
       {
         error: error instanceof Error ? error.message : 'Failed to query hardware events',
+      },
+      500,
+    )
+  }
+})
+
+app.get('/v1/context-episodes', async (c) => {
+  if (!contextEpisodes.isEnabled()) {
+    return c.json({ error: 'Supabase context episodes are not configured' }, 503)
+  }
+
+  const contextType = c.req.query('context_type')
+  const limit = Math.min(Math.max(Number(c.req.query('limit') || 20), 1), 100)
+  const minutes = Math.min(
+    Math.max(Number(c.req.query('minutes') || c.req.query('range_minutes') || 24 * 60), 1),
+    7 * 24 * 60,
+  )
+
+  try {
+    const items = await contextEpisodes.listEpisodes({
+      contextType,
+      limit,
+      minutes,
+    })
+
+    return c.json({ count: items.length, items })
+  } catch (error) {
+    return c.json(
+      {
+        error: error instanceof Error ? error.message : 'Failed to query context episodes',
       },
       500,
     )
@@ -499,8 +594,7 @@ app.post('/v1/camera/ingress', async (c) => {
               : null,
           snapshot_id: snapshotId,
           trigger,
-          width:
-            typeof body.width === 'number' && Number.isFinite(body.width) ? body.width : null,
+          width: typeof body.width === 'number' && Number.isFinite(body.width) ? body.width : null,
         },
         protocol_version: 1,
         recorded_at: new Date(timestampMs).toISOString(),
@@ -524,6 +618,147 @@ app.post('/v1/camera/ingress', async (c) => {
     block: cameraState.block,
     snapshot_id: snapshotId,
     state: cameraState.state,
+  })
+})
+
+app.post('/v1/heart-rate/ingress', async (c) => {
+  const body = (await c.req.json()) as HeartRateIngressBody
+  const nodeId = body.node_id?.trim()
+
+  if (!nodeId) {
+    return c.json({ error: 'node_id is required' }, 400)
+  }
+
+  const hasNumericReading = [
+    body.bpm,
+    body.spo2,
+    body.systolic_mm_hg,
+    body.diastolic_mm_hg,
+    body.temperature_c,
+  ].some((value) => typeof value === 'number' && Number.isFinite(value))
+
+  if (!hasNumericReading) {
+    return c.json(
+      {
+        error:
+          'At least one numeric reading is required: bpm, spo2, systolic_mm_hg, diastolic_mm_hg, or temperature_c',
+      },
+      400,
+    )
+  }
+
+  const eventId = body.event_id?.trim() || `heart-${randomUUID()}`
+  const traceId = body.trace_id?.trim() || `trace-${randomUUID()}`
+  const timestampMs =
+    typeof body.timestamp_ms === 'number' && Number.isFinite(body.timestamp_ms)
+      ? body.timestamp_ms
+      : Date.now()
+
+  const announceResult = hardware.applyMessage({
+    type: 'announce',
+    block: {
+      block_id: nodeId,
+      battery:
+        typeof body.battery === 'number' && Number.isFinite(body.battery)
+          ? Math.max(0, Math.min(100, Math.round(body.battery)))
+          : undefined,
+      capability: 'heart_rate_oximeter',
+      chip: body.chip?.trim() || 'external',
+      firmware: body.firmware?.trim() || 'heart-rate-ingress@1',
+      status: 'online',
+      type: 'sensor',
+    },
+  })
+
+  if (!announceResult.ok) {
+    return c.json({ error: announceResult.error ?? 'Failed to announce heart-rate block' }, 500)
+  }
+
+  const telemetry: Record<string, unknown> = {
+    _scope: 'sensor',
+    _subject: 'data',
+    _type: 'sensor_data',
+  }
+  if (typeof body.bpm === 'number' && Number.isFinite(body.bpm)) telemetry.bpm = body.bpm
+  if (typeof body.spo2 === 'number' && Number.isFinite(body.spo2)) telemetry.spo2 = body.spo2
+  if (typeof body.systolic_mm_hg === 'number' && Number.isFinite(body.systolic_mm_hg)) {
+    telemetry.systolic_mm_hg = body.systolic_mm_hg
+  }
+  if (typeof body.diastolic_mm_hg === 'number' && Number.isFinite(body.diastolic_mm_hg)) {
+    telemetry.diastolic_mm_hg = body.diastolic_mm_hg
+  }
+  if (typeof body.temperature_c === 'number' && Number.isFinite(body.temperature_c)) {
+    telemetry.temperature_c = body.temperature_c
+  }
+
+  const telemetryResult = hardware.applyMessage({
+    type: 'telemetry',
+    block_id: nodeId,
+    data: telemetry,
+    timestamp: timestampMs,
+  })
+
+  if (!telemetryResult.ok) {
+    return c.json({ error: telemetryResult.error ?? 'Failed to apply heart-rate telemetry' }, 500)
+  }
+
+  if (hardwareEvents.isEnabled()) {
+    void hardwareEvents
+      .insertDirectEvent({
+        capability: 'heart_rate_oximeter',
+        chip_family: body.chip?.trim() || null,
+        confidence:
+          typeof body.confidence === 'number' && Number.isFinite(body.confidence)
+            ? body.confidence
+            : null,
+        event_ts_ms: timestampMs,
+        home_id: null,
+        ingest_trace_id: traceId,
+        mac_suffix: null,
+        meta: {
+          ingress: 'direct_http_heart_rate',
+        },
+        msg_id: eventId,
+        node_id: nodeId,
+        node_type: 'hrox',
+        payload: {
+          bpm: typeof body.bpm === 'number' && Number.isFinite(body.bpm) ? body.bpm : null,
+          diastolic_mm_hg:
+            typeof body.diastolic_mm_hg === 'number' && Number.isFinite(body.diastolic_mm_hg)
+              ? body.diastolic_mm_hg
+              : null,
+          spo2: typeof body.spo2 === 'number' && Number.isFinite(body.spo2) ? body.spo2 : null,
+          systolic_mm_hg:
+            typeof body.systolic_mm_hg === 'number' && Number.isFinite(body.systolic_mm_hg)
+              ? body.systolic_mm_hg
+              : null,
+          temperature_c:
+            typeof body.temperature_c === 'number' && Number.isFinite(body.temperature_c)
+              ? body.temperature_c
+              : null,
+        },
+        protocol_version: 1,
+        recorded_at: new Date(timestampMs).toISOString(),
+        room_id: null,
+        scope: 'sensor',
+        signal_name: 'heart_sample',
+        source: 'direct_heart_rate_ingress',
+        status: 'online',
+        subject: 'data',
+        success: true,
+        topic: `direct/sensor/${nodeId}/heart_rate`,
+        type: 'sensor_data',
+      })
+      .catch((error) => {
+        console.error('[heart-rate] direct event persist failed:', error)
+      })
+  }
+
+  return c.json({
+    ok: true,
+    block: hardware.getBlock(nodeId),
+    readings: telemetry,
+    trace_id: traceId,
   })
 })
 
@@ -922,7 +1157,6 @@ if (mqttHardwareMode && mqttBridge.isEnabled()) {
     console.error('[mqtt] bridge start failed:', error)
   })
 }
-agentMemories.start()
 
 const server = BunRuntime.Bun.serve({
   fetch: app.fetch,
@@ -959,7 +1193,7 @@ function shutdown(): void {
   for (const runtime of sessions.values()) {
     runtime.destroy()
   }
-  agentMemories.stop()
+  unsubscribeHistoryRowsPersisted()
   memoryService.destroy()
   galleryDb.close()
   server.stop(true)

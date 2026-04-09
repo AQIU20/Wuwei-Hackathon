@@ -388,22 +388,79 @@ aihub/resp/imu_a1b2c3/# ← 订阅特定节点响应
 }
 ```
 
-#### 3.4.7 语音唤醒节点 — VAD
+#### 3.4.7 语音节点 — v1 摘要事件
 
-**Topic（唤醒事件）：** `aihub/event/vad_{id}/wakeword`
+v1 约定:
+- 原始音频流不进入当前 cloud agent runtime。
+- 节点本地完成 VAD / 语音识别。
+- 服务器只接收 MQTT 事件摘要，直接复用 `aihub/event/#` 链路。
+
+#### 3.4.7.1 VAD 事件
+
+**Topic：** `aihub/event/vad_{id}/vad`
 
 ```json
 {
-  "type": "event",
+  "v": 1,
+  "ts": 1744123456789,
+  "node_id": "vad_a1b2c3",
+  "msg_id": "a1b2c3d4",
+  "type": "vad",
   "payload": {
-    "wakeword": "hey_hub",
+    "active": true,
     "confidence": 0.92,
-    "noise_db": -42.5
+    "rms": 0.021,
+    "duration_ms": 1640,
+    "sample_rate": 16000,
+    "channel_count": 1,
+    "node_type": "vad"
   }
 }
 ```
 
-> 音频流数据不走 MQTT，见第5章流媒体接口。
+#### 3.4.7.2 Transcript 事件
+
+**Topic：** `aihub/event/vad_{id}/transcript`
+
+```json
+{
+  "v": 1,
+  "ts": 1744123456891,
+  "node_id": "vad_a1b2c3",
+  "msg_id": "b2c3d4e5",
+  "type": "transcript",
+  "payload": {
+    "text": "turn the lights into sunset mode",
+    "confidence": 0.91,
+    "language": "en",
+    "duration_ms": 1640,
+    "rms": 0.021,
+    "node_type": "vad"
+  }
+}
+```
+
+#### 3.4.7.3 可选唤醒词事件
+
+**Topic：** `aihub/event/vad_{id}/wakeword`
+
+```json
+{
+  "v": 1,
+  "ts": 1744123456901,
+  "node_id": "vad_a1b2c3",
+  "msg_id": "c3d4e5f6",
+  "type": "wakeword",
+  "payload": {
+    "wakeword": "hey_hub",
+    "confidence": 0.94,
+    "node_type": "vad"
+  }
+}
+```
+
+> 当前版本不要求上传原始 PCM / WebSocket 音频。
+> 如果需要实时回放、双向语音或 TTS 下行，再启用单独的流媒体接口版本。
 
 ---
 

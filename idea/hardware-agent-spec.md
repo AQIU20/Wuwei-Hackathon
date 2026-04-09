@@ -98,7 +98,7 @@ blocks/{block_id}/heartbeat    # 心跳 (QoS 0)
 | `humidity` | sensor | C3 | MQTT pub |
 | `formaldehyde` | sensor | C3 | MQTT pub |
 | `camera` | stream | S3 | UDP / 动态 WS |
-| `microphone` | stream | S3 | 动态 WS (双向) |
+| `microphone` | stream | S3 | MQTT 事件摘要 (v1) |
 | `light` | actuator | C3 | MQTT sub |
 | `vibration` | actuator | C3 | MQTT sub |
 
@@ -123,6 +123,59 @@ Host 解析 announce 后, publish 到 `blocks/{block_id}/config`:
 ```
 
 或 UDP 模式:
+
+> v1 变更:
+> `microphone` 不再要求把原始 PCM / WebSocket 音频流接入当前 agent-server。
+> 当前版本只要求硬件侧本地完成 VAD / ASR，再通过 MQTT `event` scope 上报摘要结果。
+> 这样可以直接复用现有 `aihub/event/# -> hardware_events` 的入库链路，不需要新增音频 ingress。
+
+#### 2.3.1 microphone v1 摘要事件
+
+**Topic：** `aihub/event/{node_id}/vad`
+
+```json
+{
+  "v": 1,
+  "ts": 1744123456789,
+  "node_id": "vad_demo_01",
+  "msg_id": "a1b2c3d4",
+  "type": "vad",
+  "payload": {
+    "active": true,
+    "confidence": 0.95,
+    "rms": 0.0231,
+    "duration_ms": 1840,
+    "sample_rate": 16000,
+    "channel_count": 1,
+    "node_type": "vad"
+  }
+}
+```
+
+**Topic：** `aihub/event/{node_id}/transcript`
+
+```json
+{
+  "v": 1,
+  "ts": 1744123456891,
+  "node_id": "vad_demo_01",
+  "msg_id": "b2c3d4e5",
+  "type": "transcript",
+  "payload": {
+    "text": "turn the lights into sunset mode",
+    "confidence": 0.91,
+    "language": "en",
+    "duration_ms": 1840,
+    "rms": 0.0231,
+    "node_type": "vad"
+  }
+}
+```
+
+约束:
+- `microphone` v1 只上传摘要事件, 不上传原始音频帧。
+- Agent 当前只能消费转录文本、VAD 状态和其置信度，不能直接回放或分析原始音频。
+- 如果后续确实需要双向音频/TTS，再单独设计 v2 流式 ingress。
 ```json
 {
   "channel": "udp",

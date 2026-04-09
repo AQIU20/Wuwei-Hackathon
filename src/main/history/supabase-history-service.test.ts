@@ -222,4 +222,24 @@ describe('SupabaseHistoryService', () => {
       scene: 'desk with monitor and keyboard',
     })
   })
+
+  it('emits persisted row counts after a successful history write', async () => {
+    const events: Array<{ rowCount: number; source: string }> = []
+
+    const service = new SupabaseHistoryService({
+      fetchImpl: async () => new Response('', { status: 201 }),
+      persistIntervalMs: 15_000,
+      serviceRoleKey: 'service-role',
+      supabaseUrl: 'https://example.supabase.co',
+      tableName: 'hardware_history',
+    })
+
+    service.onRowsPersisted((event) => {
+      events.push(event)
+    })
+
+    await service.persistSnapshot(createSnapshot(), 'mqtt_update')
+
+    expect(events).toEqual([{ rowCount: 2, source: 'mqtt_update' }])
+  })
 })

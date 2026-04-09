@@ -33,9 +33,11 @@ Server endpoints:
 - `GET /v1/blocks/:blockId/history`
 - `GET /v1/history`
 - `GET /v1/hardware-events`
+- `GET /v1/context-episodes`
 - `GET /v1/hardware/ws`
 - `POST /v1/chat/sessions`
 - `POST /v1/chat/sessions/:sessionId/messages`
+- `POST /v1/heart-rate/ingress`
 
 ### Frontend
 
@@ -104,8 +106,8 @@ Deploy check:
 
 - Apply `idea/hardware-events-memory-schema.sql` in Supabase before enabling the MQTT bridge.
 - `hardware_events` stores the original AI Hub MQTT envelope plus normalized routing fields like `scope`, `subject`, `node_type`, `capability`, `status`, and `confidence`.
-- `context_episodes` is reserved for scheduler-built context episodes such as `resting_at_home`.
-- `agent_memories` is reserved for long-lived memory distilled from repeated episodes.
+- `context_episodes` is built by the server scheduler from recent `hardware_events`, producing short-lived situation summaries such as `voice_interaction` or `resting_at_home`.
+- `agent_memories` is built from repeated `context_episodes`, producing longer-lived behavior memory with `source_episode_ids` backreferences.
 
 ## Testing
 
@@ -235,6 +237,33 @@ Recommended request fields:
 - `analysis_text`: optional vision analysis text or scene summary
 - `image_url` or `image_base64`: the actual image reference or encoded image payload
 - `mime_type`, `width`, `height`, `size_bytes`, `confidence`, `trigger`, `timestamp_ms`: optional metadata
+
+## Direct Heart-Rate Ingress
+
+For mock or external wearable heart-rate samples that should bypass MQTT and land directly in both live state and Supabase:
+
+```bash
+curl -X POST http://localhost:8787/v1/heart-rate/ingress \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "node_id": "heart_01",
+    "event_id": "evt-heart-0001",
+    "trace_id": "trace-heart-0001",
+    "bpm": 66,
+    "spo2": 98,
+    "systolic_mm_hg": 119,
+    "diastolic_mm_hg": 77,
+    "temperature_c": 36.5,
+    "confidence": 0.97,
+    "timestamp_ms": 1744123456891
+  }'
+```
+
+Behavior:
+- updates the live `HardwareStore` immediately as a `heart_rate_oximeter` sensor block
+- writes an async `hardware_events` row with the original heart-rate sample payload
+- writes `hardware_history` rows through the existing snapshot persistence path
+- contributes toward the 10-row `hardware_history` trigger for `context_episodes` and `agent_memories`
 
 ## Tech Stack
 

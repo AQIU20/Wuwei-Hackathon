@@ -22,6 +22,7 @@ export interface AgentMemoryUpsert {
   confidence: number
   evidence_count: number
   last_observed_at: string
+  source_episode_ids?: string[]
   reason: string | null
   status: string
 }
@@ -45,8 +46,7 @@ export class SupabaseMemoryService {
   constructor(options: SupabaseMemoryServiceOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch
     this.supabaseUrl = options.supabaseUrl ?? process.env.SUPABASE_URL ?? null
-    this.serviceRoleKey =
-      options.serviceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? null
+    this.serviceRoleKey = options.serviceRoleKey ?? process.env.SUPABASE_SERVICE_ROLE_KEY ?? null
     this.tableName = options.tableName ?? 'agent_memories'
     this.enabled = Boolean(this.supabaseUrl && this.serviceRoleKey)
   }
@@ -59,7 +59,7 @@ export class SupabaseMemoryService {
   async listMemories(homeId?: string | null): Promise<AgentMemoryRow[]> {
     if (!this.enabled) throw new Error('Supabase memory is not configured')
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!)
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
     url.searchParams.set(
       'select',
       'id,home_id,memory_type,memory_key,memory_value,confidence,evidence_count,last_observed_at,source_episode_ids,reason,status,created_at,updated_at',
@@ -78,7 +78,7 @@ export class SupabaseMemoryService {
   async upsertMemory(row: AgentMemoryUpsert): Promise<void> {
     if (!this.enabled) return
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!)
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
     url.searchParams.set('on_conflict', 'home_id,memory_key')
 
     const res = await this.fetchImpl(url.toString(), {
@@ -104,7 +104,7 @@ export class SupabaseMemoryService {
   async deleteMemory(id: string): Promise<void> {
     if (!this.enabled) throw new Error('Supabase memory is not configured')
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!)
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
     url.searchParams.set('id', `eq.${id}`)
 
     const res = await this.fetchImpl(url.toString(), {
@@ -124,7 +124,7 @@ export class SupabaseMemoryService {
   async deleteMemoryByKey(memoryKey: string, homeId?: string | null): Promise<void> {
     if (!this.enabled) throw new Error('Supabase memory is not configured')
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!)
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
     url.searchParams.set('home_id', `eq.${this.normalizeHomeId(homeId)}`)
     url.searchParams.set('memory_key', `eq.${memoryKey}`)
     url.searchParams.set('status', 'eq.active')
@@ -147,7 +147,7 @@ export class SupabaseMemoryService {
   async updateMemory(id: string, value: string, reason: string | null): Promise<void> {
     if (!this.enabled) throw new Error('Supabase memory is not configured')
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!)
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
     url.searchParams.set('id', `eq.${id}`)
 
     const res = await this.fetchImpl(url.toString(), {
@@ -176,7 +176,7 @@ export class SupabaseMemoryService {
   ): Promise<void> {
     if (!this.enabled) throw new Error('Supabase memory is not configured')
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.supabaseUrl!)
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
     url.searchParams.set('home_id', `eq.${this.normalizeHomeId(homeId)}`)
     url.searchParams.set('memory_key', `eq.${memoryKey}`)
     url.searchParams.set('status', 'eq.active')
@@ -200,10 +200,27 @@ export class SupabaseMemoryService {
   }
 
   private buildHeaders(): Record<string, string> {
+    const serviceRoleKey = this.getServiceRoleKey()
     return {
-      apikey: this.serviceRoleKey!,
-      Authorization: `Bearer ${this.serviceRoleKey!}`,
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
     }
+  }
+
+  private getSupabaseUrl(): string {
+    if (!this.supabaseUrl) {
+      throw new Error('SUPABASE_URL is not configured')
+    }
+
+    return this.supabaseUrl
+  }
+
+  private getServiceRoleKey(): string {
+    if (!this.serviceRoleKey) {
+      throw new Error('SUPABASE_SERVICE_ROLE_KEY is not configured')
+    }
+
+    return this.serviceRoleKey
   }
 
   private normalizeHomeId(homeId?: string | null): string {

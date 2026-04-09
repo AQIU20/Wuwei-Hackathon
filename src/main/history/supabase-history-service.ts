@@ -23,6 +23,13 @@ interface SupabaseHistoryServiceOptions {
   tableName?: string
 }
 
+interface HistoryPersistEvent {
+  rowCount: number
+  source: string
+}
+
+type PersistListener = (event: HistoryPersistEvent) => void
+
 export interface HistorySample {
   battery: number
   blockCapability: string
@@ -73,6 +80,7 @@ export class SupabaseHistoryService {
   private readonly serviceRoleKey: string | null
   private readonly supabaseUrl: string | null
   private readonly lastPersistAtByBlock = new Map<string, number>()
+  private readonly persistListeners = new Set<PersistListener>()
 
   constructor(options: SupabaseHistoryServiceOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch
@@ -95,6 +103,11 @@ export class SupabaseHistoryService {
       persistIntervalMs: this.persistIntervalMs,
       tableName: this.tableName,
     }
+  }
+
+  onRowsPersisted(listener: PersistListener): () => void {
+    this.persistListeners.add(listener)
+    return () => this.persistListeners.delete(listener)
   }
 
   async persistSnapshot(snapshot: HardwareSnapshot, source = 'server_snapshot'): Promise<void> {
@@ -141,6 +154,11 @@ export class SupabaseHistoryService {
     for (const row of eligibleRows) {
       this.lastPersistAtByBlock.set(row.block_id, now)
     }
+
+    this.emitPersisted({
+      rowCount: eligibleRows.length,
+      source,
+    })
   }
 
   async queryHistory(params: {
@@ -196,15 +214,18 @@ export class SupabaseHistoryService {
   }
 
   private async insertRows(rows: SupabaseHistoryRow[]): Promise<boolean> {
-    const response = await this.fetchImpl(new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()), {
-      method: 'POST',
-      headers: {
-        ...this.buildHeaders(),
-        'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
+    const response = await this.fetchImpl(
+      new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl()),
+      {
+        method: 'POST',
+        headers: {
+          ...this.buildHeaders(),
+          'Content-Type': 'application/json',
+          Prefer: 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify(rows),
       },
-      body: JSON.stringify(rows),
-    })
+    )
 
     if (!response.ok) {
       const message = await response.text()
@@ -237,5 +258,11 @@ export class SupabaseHistoryService {
     }
 
     return this.serviceRoleKey
+  }
+
+  private emitPersisted(event: HistoryPersistEvent): void {
+    for (const listener of this.persistListeners) {
+      listener(event)
+    }
   }
 }
