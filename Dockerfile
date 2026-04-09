@@ -7,8 +7,7 @@ RUN bun install --frozen-lockfile
 
 FROM base AS runtime
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 python3-pip \
-  && pip3 install --no-cache-dir paho-mqtt \
+  && apt-get install -y --no-install-recommends python3 python3-paho-mqtt \
   && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV PORT=8787
