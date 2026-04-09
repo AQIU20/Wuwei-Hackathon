@@ -30,6 +30,9 @@ interface AgentMemoryCuratorOptions {
   supabaseMemory: SupabaseMemoryService
 }
 
+const DEFAULT_LLM_TIMEOUT_MS = 45_000
+const DEFAULT_RUN_TIMEOUT_MS = 60_000
+
 const CURATOR_PROMPT = `You create long-term agent memories from recent smart-home / wearable context episodes.
 
 The input contains:
@@ -114,6 +117,26 @@ function normalizeMemoryKey(value: string | undefined, fallbackValue: string): s
   return normalized || `memory_${Date.now()}`
 }
 
+function timeoutError(label: string, timeoutMs: number): Error {
+  return new Error(`${label} timed out after ${timeoutMs}ms`)
+}
+
+async function withTimeout<T>(label: string, timeoutMs: number, task: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(timeoutError(label, timeoutMs))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function compactEpisode(sample: ContextEpisodeRow): Record<string, unknown> {
   return {
     confidence: sample.confidence,
@@ -173,14 +196,26 @@ function buildMockMemoriesFromEpisodes(
 export class AgentMemoryCurator {
   private intervalHandle: Timer | null = null
   private readonly intervalMs: number
+  private lastError: string | null = null
+  private lastRunAt: string | null = null
+  private readonly llmTimeoutMs: number
   private readonly maxMemories: number
   private readonly minutes: number
+  private readonly runTimeoutMs: number
   private running = false
 
   constructor(private options: AgentMemoryCuratorOptions) {
     this.intervalMs = options.intervalMs ?? Number(process.env.AGENT_MEMORY_INTERVAL_MS || 60_000)
+    this.llmTimeoutMs = Math.max(
+      1_000,
+      Number(process.env.AGENT_MEMORY_LLM_TIMEOUT_MS || DEFAULT_LLM_TIMEOUT_MS),
+    )
     this.maxMemories = options.maxMemories ?? Number(process.env.AGENT_MEMORY_MAX_ITEMS || 6)
     this.minutes = options.minutes ?? Number(process.env.AGENT_MEMORY_WINDOW_MINUTES || 60 * 24 * 3)
+    this.runTimeoutMs = Math.max(
+      this.llmTimeoutMs + 1_000,
+      Number(process.env.AGENT_MEMORY_RUN_TIMEOUT_MS || DEFAULT_RUN_TIMEOUT_MS),
+    )
   }
 
   start(): void {
@@ -205,9 +240,13 @@ export class AgentMemoryCurator {
     return {
       enabled: this.options.contextEpisodes.isEnabled() && this.options.supabaseMemory.isEnabled(),
       intervalMs: this.intervalMs,
+      lastError: this.lastError,
+      lastRunAt: this.lastRunAt,
+      llmTimeoutMs: this.llmTimeoutMs,
       maxMemories: this.maxMemories,
       minutes: this.minutes,
       running: this.running,
+      runTimeoutMs: this.runTimeoutMs,
     }
   }
 
@@ -221,6 +260,17 @@ export class AgentMemoryCurator {
     if (!mockMode && !auth) return
 
     this.running = true
+    this.lastRunAt = new Date().toISOString()
+    this.lastError = null
+    const runStartedAt = this.lastRunAt
+    const watchdog = setTimeout(() => {
+      if (this.running && this.lastRunAt === runStartedAt) {
+        this.lastError = timeoutError('agent memory run', this.runTimeoutMs).message
+        this.running = false
+        console.error('[agent-memories] watchdog released stuck run')
+      }
+    }, this.runTimeoutMs)
+
     try {
       const [episodes, existing] = await Promise.all([
         this.options.contextEpisodes.listEpisodes({
@@ -255,21 +305,25 @@ export class AgentMemoryCurator {
         rawCandidates =
           safeJsonParse<CuratorResult>(
             extractTextFromResponse(
-              await complete(
-                liveAuth.model,
-                {
-                  systemPrompt: CURATOR_PROMPT,
-                  messages: [
-                    {
-                      role: 'user',
-                      content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
-                      timestamp: Date.now(),
-                    },
-                  ],
-                },
-                {
-                  apiKey: liveAuth.apiKey,
-                },
+              await withTimeout(
+                'agent memory LLM call',
+                this.llmTimeoutMs,
+                complete(
+                  liveAuth.model,
+                  {
+                    systemPrompt: CURATOR_PROMPT,
+                    messages: [
+                      {
+                        role: 'user',
+                        content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
+                        timestamp: Date.now(),
+                      },
+                    ],
+                  },
+                  {
+                    apiKey: liveAuth.apiKey,
+                  },
+                ),
               ),
             ),
           )?.memories ?? []
@@ -317,7 +371,11 @@ export class AgentMemoryCurator {
           status: 'active',
         })
       }
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : String(error)
+      throw error
     } finally {
+      clearTimeout(watchdog)
       this.running = false
     }
   }

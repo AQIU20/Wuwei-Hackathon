@@ -30,6 +30,9 @@ interface ContextEpisodeCuratorOptions {
   registry: ProviderRegistry
 }
 
+const DEFAULT_LLM_TIMEOUT_MS = 45_000
+const DEFAULT_RUN_TIMEOUT_MS = 60_000
+
 const CURATOR_PROMPT = `You build context episodes from recent smart-home / wearable hardware events.
 
 The input contains:
@@ -141,6 +144,26 @@ function normalizeIsoTime(value: string | undefined, fallback: string): string {
   return new Date(parsed).toISOString()
 }
 
+function timeoutError(label: string, timeoutMs: number): Error {
+  return new Error(`${label} timed out after ${timeoutMs}ms`)
+}
+
+async function withTimeout<T>(label: string, timeoutMs: number, task: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | null = null
+  try {
+    return await Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(timeoutError(label, timeoutMs))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function overlapsOrTouches(
   startAt: string,
   endAt: string,
@@ -222,16 +245,28 @@ function buildMockEpisodesFromEvents(
 export class ContextEpisodeCurator {
   private intervalHandle: Timer | null = null
   private readonly intervalMs: number
+  private lastError: string | null = null
+  private lastRunAt: string | null = null
   private readonly maxEpisodes: number
   private readonly mergeGapMs = 15 * 60_000
   private readonly minutes: number
+  private readonly llmTimeoutMs: number
+  private readonly runTimeoutMs: number
   private running = false
 
   constructor(private options: ContextEpisodeCuratorOptions) {
     this.intervalMs =
       options.intervalMs ?? Number(process.env.CONTEXT_EPISODE_INTERVAL_MS || 60_000)
+    this.llmTimeoutMs = Math.max(
+      1_000,
+      Number(process.env.CONTEXT_EPISODE_LLM_TIMEOUT_MS || DEFAULT_LLM_TIMEOUT_MS),
+    )
     this.maxEpisodes = options.maxEpisodes ?? Number(process.env.CONTEXT_EPISODE_MAX_ITEMS || 6)
     this.minutes = options.minutes ?? Number(process.env.CONTEXT_EPISODE_WINDOW_MINUTES || 180)
+    this.runTimeoutMs = Math.max(
+      this.llmTimeoutMs + 1_000,
+      Number(process.env.CONTEXT_EPISODE_RUN_TIMEOUT_MS || DEFAULT_RUN_TIMEOUT_MS),
+    )
   }
 
   start(): void {
@@ -256,9 +291,13 @@ export class ContextEpisodeCurator {
     return {
       enabled: this.options.hardwareEvents.isEnabled() && this.options.contextEpisodes.isEnabled(),
       intervalMs: this.intervalMs,
+      lastError: this.lastError,
+      lastRunAt: this.lastRunAt,
+      llmTimeoutMs: this.llmTimeoutMs,
       maxEpisodes: this.maxEpisodes,
       minutes: this.minutes,
       running: this.running,
+      runTimeoutMs: this.runTimeoutMs,
     }
   }
 
@@ -272,6 +311,17 @@ export class ContextEpisodeCurator {
     if (!mockMode && !auth) return
 
     this.running = true
+    this.lastRunAt = new Date().toISOString()
+    this.lastError = null
+    const runStartedAt = this.lastRunAt
+    const watchdog = setTimeout(() => {
+      if (this.running && this.lastRunAt === runStartedAt) {
+        this.lastError = timeoutError('context episode run', this.runTimeoutMs).message
+        this.running = false
+        console.error('[context-episodes] watchdog released stuck run')
+      }
+    }, this.runTimeoutMs)
+
     try {
       const [events, recentEpisodes] = await Promise.all([
         this.options.hardwareEvents.queryEvents({
@@ -305,21 +355,25 @@ export class ContextEpisodeCurator {
         rawCandidates =
           safeJsonParse<CuratorResult>(
             extractTextFromResponse(
-              await complete(
-                liveAuth.model,
-                {
-                  systemPrompt: CURATOR_PROMPT,
-                  messages: [
-                    {
-                      role: 'user',
-                      content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
-                      timestamp: Date.now(),
-                    },
-                  ],
-                },
-                {
-                  apiKey: liveAuth.apiKey,
-                },
+              await withTimeout(
+                'context episode LLM call',
+                this.llmTimeoutMs,
+                complete(
+                  liveAuth.model,
+                  {
+                    systemPrompt: CURATOR_PROMPT,
+                    messages: [
+                      {
+                        role: 'user',
+                        content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
+                        timestamp: Date.now(),
+                      },
+                    ],
+                  },
+                  {
+                    apiKey: liveAuth.apiKey,
+                  },
+                ),
               ),
             ),
           )?.episodes ?? []
@@ -388,7 +442,11 @@ export class ContextEpisodeCurator {
         })
         recentEpisodes.unshift(created)
       }
+    } catch (error) {
+      this.lastError = error instanceof Error ? error.message : String(error)
+      throw error
     } finally {
+      clearTimeout(watchdog)
       this.running = false
     }
   }
