@@ -76,6 +76,21 @@ type LightActuatorState = {
   r: number;
 };
 
+type ContextEpisode = {
+  id: string;
+  summary: string;
+  context_type: string;
+  created_at: string;
+};
+
+type AgentMemory = {
+  id: string;
+  memory_key: string;
+  memory_value: string;
+  memory_type: string;
+  created_at: string;
+};
+
 const AGENT_SERVER_URL = getAgentServerUrl();
 
 export function AgentPanel() {
@@ -88,6 +103,8 @@ export function AgentPanel() {
     "idle",
   );
   const [error, setError] = useState<string | null>(null);
+  const [episodes, setEpisodes] = useState<ContextEpisode[]>([]);
+  const [memories, setMemories] = useState<AgentMemory[]>([]);
   const requestAbortRef = useRef<AbortController | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const lightBlock =
@@ -157,6 +174,37 @@ export function AgentPanel() {
 
     return () => {
       ws.close();
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchMemoryData() {
+      try {
+        const [epRes, memRes] = await Promise.all([
+          fetch(`${AGENT_SERVER_URL}/v1/context-episodes?limit=5`),
+          fetch(`${AGENT_SERVER_URL}/v1/memory/preferences`),
+        ]);
+        if (cancelled) return;
+        if (epRes.ok) {
+          const epData = (await epRes.json()) as { items: ContextEpisode[] };
+          setEpisodes(epData.items.slice(0, 5));
+        }
+        if (memRes.ok) {
+          const memData = (await memRes.json()) as { items: AgentMemory[] };
+          setMemories(memData.items.slice(0, 5));
+        }
+      } catch {
+        // silently ignore – non-critical UI section
+      }
+    }
+
+    void fetchMemoryData();
+    const interval = setInterval(fetchMemoryData, 30_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
     };
   }, []);
 
@@ -317,13 +365,10 @@ export function AgentPanel() {
       {/* Chat panel */}
       <SpotlightCard className="lg:col-span-3 p-0">
         <div className="flex items-center gap-3 border-b border-black/10 px-6 py-4">
-          <span className="pulse-dot block h-2 w-2 rounded-full bg-[color:var(--accent-2)]" />
+          <StatusBadge active={!!sessionId} label={sessionId ? (locale === "zh" ? "已连接" : "Connected") : (locale === "zh" ? "未连接" : "Disconnected")} />
           <p className="font-mono text-xs uppercase tracking-[0.2em] text-black/50">
             {t.agent.header}
           </p>
-          <span className="ml-auto font-mono text-[10px] text-black/30">
-            {t.agent.ready}
-          </span>
         </div>
 
         <div
@@ -454,12 +499,9 @@ export function AgentPanel() {
                     {lightSummary.detail}
                   </p>
                 </div>
-                <span
-                  className={`mt-1 block h-2.5 w-2.5 rounded-full ${
-                    lightBlock?.status === "online"
-                      ? "pulse-dot bg-[color:var(--accent-2)]"
-                      : "bg-black/20"
-                  }`}
+                <StatusBadge
+                  active={lightBlock?.status === "online"}
+                  label={lightBlock?.status === "online" ? (locale === "zh" ? "在线" : "Online") : (locale === "zh" ? "离线" : "Offline")}
                 />
               </div>
             </div>
@@ -512,12 +554,10 @@ export function AgentPanel() {
                 className="flex items-center justify-between rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2"
               >
                 <span className="flex items-center gap-2">
-                  <span
-                    className={`block h-1.5 w-1.5 rounded-full ${
-                      b.status === "online"
-                        ? "pulse-dot bg-[color:var(--accent-2)]"
-                        : "bg-black/20"
-                    }`}
+                  <StatusBadge
+                    active={b.status === "online"}
+                    label={b.status === "online" ? (locale === "zh" ? "在线" : "Online") : (locale === "zh" ? "离线" : "Offline")}
+                    small
                   />
                   <span className="font-mono text-xs text-black/80">
                     {b.block_id}
@@ -526,6 +566,46 @@ export function AgentPanel() {
                 <span className="text-xs text-black/40">
                   {formatCapabilityLabel(b.capability, locale)}
                 </span>
+              </li>
+            ))}
+          </ul>
+        </SpotlightCard>
+
+        {/* Context Episodes */}
+        <SpotlightCard>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-black/40">
+            {locale === "zh" ? "情境记录" : "Context Episodes"}
+          </p>
+          <ul className="mt-3 space-y-2">
+            {episodes.length === 0 && (
+              <li className="text-xs text-black/30">{locale === "zh" ? "暂无数据" : "No episodes yet"}</li>
+            )}
+            {episodes.map((ep) => (
+              <li key={ep.id} className="rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2">
+                <p className="text-xs leading-relaxed text-black/70">{ep.summary}</p>
+                <p className="mt-1 font-mono text-[10px] text-black/30">
+                  {ep.context_type} · {new Date(ep.created_at).toLocaleString()}
+                </p>
+              </li>
+            ))}
+          </ul>
+        </SpotlightCard>
+
+        {/* Agent Memories */}
+        <SpotlightCard>
+          <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-black/40">
+            {locale === "zh" ? "Agent 记忆" : "Agent Memories"}
+          </p>
+          <ul className="mt-3 space-y-2">
+            {memories.length === 0 && (
+              <li className="text-xs text-black/30">{locale === "zh" ? "暂无记忆" : "No memories yet"}</li>
+            )}
+            {memories.map((mem) => (
+              <li key={mem.id} className="rounded-lg border border-black/5 bg-black/[0.02] px-3 py-2">
+                <p className="text-xs leading-relaxed text-black/70">{mem.memory_value}</p>
+                <p className="mt-1 font-mono text-[10px] text-black/30">
+                  {mem.memory_type} · {mem.memory_key}
+                </p>
               </li>
             ))}
           </ul>
@@ -764,6 +844,22 @@ function Thinking({ label }: { label: string }) {
       </span>
       {label}
     </div>
+  );
+}
+
+function StatusBadge({ active, label, small }: { active: boolean; label: string; small?: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center rounded-full font-mono leading-none ${
+        small ? "px-1.5 py-0.5 text-[9px]" : "px-2 py-1 text-[10px]"
+      } ${
+        active
+          ? "bg-[#ff6c37] text-black"
+          : "bg-[#6b7280] text-white"
+      }`}
+    >
+      {label}
+    </span>
   );
 }
 
