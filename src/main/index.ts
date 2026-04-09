@@ -978,9 +978,6 @@ app.post('/v1/chat/sessions/:sessionId/messages', async (c) => {
 
     try {
       const demoShortcut = await applyDemoShortcut({
-        cwd: paths.cwd,
-        hardware,
-        mqttBridge: mqttHardwareMode ? mqttBridge : null,
         text,
       })
       if (demoShortcut) {
