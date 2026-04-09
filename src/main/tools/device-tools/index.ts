@@ -7,6 +7,7 @@ import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
 import { Type } from '@sinclair/typebox'
 import type { AihubMqttBridge } from '../../hardware/mqtt-bridge'
 import type { HardwareStore } from '../../hardware/store'
+import { isHelperBackedNodeId, runHelperLightAction } from '../ai-node'
 
 interface DeviceDefinition {
   blockId: string
@@ -35,6 +36,7 @@ function createLightTool(
   blockId: string,
   label: string,
   description: string,
+  cwd: string,
   hardware: HardwareStore,
   mqttBridge: AihubMqttBridge | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -87,25 +89,6 @@ function createLightTool(
     ],
     parameters: schema,
     async execute(_id: string, params: { action: string; r?: number; g?: number; b?: number; brightness?: number; pattern?: string }) {
-      const block = hardware.getBlock(blockId)
-
-      if (!block) {
-        return {
-          content: [{ type: 'text', text: `Error: device "${blockId}" not found.` }],
-          details: undefined,
-          isError: true,
-        }
-      }
-
-      if (block.status === 'offline') {
-        return {
-          content: [{ type: 'text', text: `Error: "${label || blockId}" is offline.` }],
-          details: undefined,
-          isError: true,
-        }
-      }
-
-      // Map to hardware store action
       const action = params.action
       const actionParams: Record<string, unknown> = {}
 
@@ -122,6 +105,64 @@ function createLightTool(
         actionParams.g = 255
         actionParams.b = 255
         actionParams.brightness = params.brightness ?? 100
+      }
+
+      if (isHelperBackedNodeId(blockId)) {
+        try {
+          const helper = await runHelperLightAction({
+            action,
+            blockId,
+            cwd,
+            params: actionParams,
+          })
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: [
+                  `${label || blockId}: helper command sent`,
+                  `Helper mode: ${helper.mode}`,
+                  `Command args: ${JSON.stringify(helper.commandArgs.slice(1))}`,
+                  '',
+                  JSON.stringify(helper.result, null, 2),
+                ].join('\n'),
+              },
+            ],
+            details: undefined,
+          }
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error controlling "${label || blockId}" via helper: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            details: undefined,
+            isError: true,
+          }
+        }
+      }
+
+      const block = hardware.getBlock(blockId)
+
+      if (!block) {
+        return {
+          content: [{ type: 'text', text: `Error: device "${blockId}" not found.` }],
+          details: undefined,
+          isError: true,
+        }
+      }
+
+      if (block.status === 'offline') {
+        return {
+          content: [{ type: 'text', text: `Error: "${label || blockId}" is offline.` }],
+          details: undefined,
+          isError: true,
+        }
       }
 
       // Update in-memory state
@@ -226,11 +267,12 @@ export function createSensorTool(
 // ── Public factory ────────────────────────────────────────────────────────────
 
 export function createDeviceTools(
+  cwd: string,
   hardware: HardwareStore,
   mqttBridge: AihubMqttBridge | null,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
 ): ToolDefinition<any, any, any>[] {
   return DEVICE_DEFINITIONS.map((def) =>
-    createLightTool(def.blockId, def.label, def.description, hardware, mqttBridge),
+    createLightTool(def.blockId, def.label, def.description, cwd, hardware, mqttBridge),
   )
 }

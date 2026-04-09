@@ -8,6 +8,7 @@ import type { ToolContext } from '../types'
 const execFileAsync = promisify(execFile)
 
 const DEFAULT_TIMEOUT_MS = 12_000
+const DEFAULT_HELPER_NODE_IDS = ['heap_c13de8', 'led_fd8480']
 
 const nodeStatusSchema = Type.Object({
   node_id: Type.String({
@@ -92,12 +93,44 @@ type NodeEnvParams = Static<typeof nodeEnvSchema>
 type NodeWs2812Params = Static<typeof nodeWs2812Schema>
 type NodeRawParams = Static<typeof nodeRawSchema>
 
-function getScriptPath(ctx: ToolContext): string {
-  return join(ctx.cwd, 'idea', 'aht20xxx.py')
+function getScriptPath(cwd: string): string {
+  return join(cwd, 'idea', 'aht20xxx.py')
 }
 
 function getPythonBin(): string {
   return process.env.AI_NODE_PYTHON_BIN?.trim() || 'python3'
+}
+
+function getHelperNodeIds(): Set<string> {
+  const raw = process.env.AI_NODE_HELPER_NODE_IDS?.trim()
+  if (!raw) {
+    return new Set(DEFAULT_HELPER_NODE_IDS)
+  }
+
+  return new Set(
+    raw
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean),
+  )
+}
+
+export function isHelperBackedNodeId(nodeId: string): boolean {
+  return getHelperNodeIds().has(nodeId.trim())
+}
+
+export function scaleBrightnessPercentToByte(value: unknown, fallback = 255): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return fallback
+  }
+
+  return Math.round(Math.min(Math.max(value, 0), 100) * 2.55)
+}
+
+function normalizeOptionalBrightnessByte(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value)
+    ? scaleBrightnessPercentToByte(value)
+    : undefined
 }
 
 export function buildNodeCommandArgs(
@@ -160,6 +193,97 @@ async function runNodeScript(args: string[]): Promise<unknown> {
   }
 }
 
+export async function runNodeScriptForCwd(cwd: string, args: string[]): Promise<unknown> {
+  const scriptPath = getScriptPath(cwd)
+  return runNodeScript([scriptPath, ...args])
+}
+
+export async function runHelperLightAction(args: {
+  action: string
+  blockId: string
+  cwd: string
+  params?: Record<string, unknown>
+}): Promise<{
+  commandArgs: string[]
+  mode: 'raw' | 'ws2812'
+  result: unknown
+}> {
+  const params = args.params ?? {}
+  const normalizedAction = args.action.trim().toLowerCase()
+
+  if (normalizedAction === 'off') {
+    const commandArgs = buildNodeCommandArgs(getScriptPath(args.cwd), 'ws2812', {
+      effect: 'off',
+      nodeId: args.blockId,
+    })
+    return {
+      commandArgs,
+      mode: 'ws2812',
+      result: await runNodeScript(commandArgs),
+    }
+  }
+
+  if (normalizedAction === 'on') {
+    const brightness = scaleBrightnessPercentToByte(params.brightness, 255)
+    const commandArgs = buildNodeCommandArgs(getScriptPath(args.cwd), 'raw', {
+      fill: `${brightness},${brightness},${brightness}`,
+      nodeId: args.blockId,
+    })
+    return {
+      commandArgs,
+      mode: 'raw',
+      result: await runNodeScript(commandArgs),
+    }
+  }
+
+  if (normalizedAction === 'set_color') {
+    const brightnessFactor =
+      typeof params.brightness === 'number' && Number.isFinite(params.brightness)
+        ? Math.min(Math.max(params.brightness, 0), 100) / 100
+        : 1
+    const r = Math.round(Math.min(Math.max(Number(params.r ?? 255), 0), 255) * brightnessFactor)
+    const g = Math.round(Math.min(Math.max(Number(params.g ?? 255), 0), 255) * brightnessFactor)
+    const b = Math.round(Math.min(Math.max(Number(params.b ?? 255), 0), 255) * brightnessFactor)
+    const commandArgs = buildNodeCommandArgs(getScriptPath(args.cwd), 'raw', {
+      fill: `${r},${g},${b}`,
+      nodeId: args.blockId,
+    })
+    return {
+      commandArgs,
+      mode: 'raw',
+      result: await runNodeScript(commandArgs),
+    }
+  }
+
+  if (normalizedAction === 'set_pattern') {
+    const pattern = String(params.pattern ?? 'rainbow').trim().toLowerCase()
+    if (!['off', 'rainbow', 'particles', 'siri', 'boot', 'wifi_connecting', 'mqtt_online', 'status'].includes(pattern)) {
+      throw new Error(
+        `Unsupported helper pattern "${pattern}". Supported patterns: off, rainbow, particles, siri, boot, wifi_connecting, mqtt_online, status.`,
+      )
+    }
+
+    const commandArgs = buildNodeCommandArgs(getScriptPath(args.cwd), 'ws2812', {
+      brightness: normalizeOptionalBrightnessByte(params.brightness),
+      effect: pattern,
+      hue:
+        typeof params.hue === 'number' && Number.isFinite(params.hue) ? params.hue : undefined,
+      nodeId: args.blockId,
+      speed:
+        typeof params.speed_ms === 'number' && Number.isFinite(params.speed_ms)
+          ? params.speed_ms
+          : undefined,
+    })
+    return {
+      commandArgs,
+      mode: 'ws2812',
+      result: await runNodeScript(commandArgs),
+    }
+  }
+
+  throw new Error(`Unsupported helper light action "${args.action}".`)
+}
+
 function formatToolResult(summary: string, payload: unknown): string {
   return `${summary}\n\n${JSON.stringify(payload, null, 2)}`
 }
@@ -167,7 +291,7 @@ function formatToolResult(summary: string, payload: unknown): string {
 export function createAiNodeTools(
   ctx: ToolContext,
 ): ToolDefinition<typeof nodeStatusSchema | typeof nodeEnvSchema | typeof nodeWs2812Schema | typeof nodeRawSchema>[] {
-  const scriptPath = getScriptPath(ctx)
+  const scriptPath = getScriptPath(ctx.cwd)
 
   return [
     {

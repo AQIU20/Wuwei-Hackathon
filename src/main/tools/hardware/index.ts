@@ -2,6 +2,7 @@ import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
 import { type Static, Type } from '@sinclair/typebox'
 import type { AihubMqttBridge } from '../../hardware/mqtt-bridge'
 import type { HardwareStore } from '../../hardware/store'
+import { isHelperBackedNodeId, runHelperLightAction } from '../ai-node'
 
 type PresetCapability = 'light' | 'sound' | 'vibration'
 
@@ -95,12 +96,55 @@ type PresetActuatorControlParams = Static<typeof presetActuatorControlSchema>
 async function executeActuatorCommand(args: {
   action: string
   blockId: string
+  cwd: string
   hardware: HardwareStore
   mqttBridge: AihubMqttBridge | null
   params?: Record<string, unknown>
 }) {
-  const { action, blockId, hardware, mqttBridge } = args
+  const { action, blockId, cwd, hardware, mqttBridge } = args
   const params = args.params ?? {}
+  if (isHelperBackedNodeId(blockId)) {
+    try {
+      const helper = await runHelperLightAction({
+        action,
+        blockId,
+        cwd,
+        params,
+      })
+
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: [
+              `Command handled for ${hardware.getNodeLabel(blockId)} (${blockId}) via helper: ${action}`,
+              `Parameters: ${JSON.stringify(params)}`,
+              `Helper mode: ${helper.mode}`,
+              `Command args: ${JSON.stringify(helper.commandArgs.slice(1))}`,
+              '',
+              'Helper result:',
+              JSON.stringify(helper.result, null, 2),
+            ].join('\n'),
+          },
+        ],
+        details: undefined,
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text' as const,
+            text: `Error controlling "${blockId}" via helper: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        details: undefined,
+        isError: true,
+      }
+    }
+  }
+
   const block = hardware.getBlock(blockId)
 
   if (!block) {
@@ -173,7 +217,7 @@ async function executeActuatorCommand(args: {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function createPresetActuatorTools(hardware: HardwareStore, mqttBridge: AihubMqttBridge | null): ToolDefinition<any, any, any>[] {
+function createPresetActuatorTools(cwd: string, hardware: HardwareStore, mqttBridge: AihubMqttBridge | null): ToolDefinition<any, any, any>[] {
   const presets = parseActuatorToolPresets(process.env.HARDWARE_ACTUATOR_TOOL_PRESETS)
 
   return presets.map((preset) => ({
@@ -197,6 +241,7 @@ function createPresetActuatorTools(hardware: HardwareStore, mqttBridge: AihubMqt
         hardware,
         mqttBridge,
         blockId: preset.blockId,
+        cwd,
         action: params.action,
         params: params.params ?? {},
       })
@@ -530,6 +575,7 @@ const controlActuatorSchema = Type.Object({
 type ControlActuatorParams = Static<typeof controlActuatorSchema>
 
 function createControlActuatorTool(
+  cwd: string,
   hardware: HardwareStore,
   mqttBridge: AihubMqttBridge | null,
 ): ToolDefinition<typeof controlActuatorSchema> {
@@ -553,6 +599,7 @@ function createControlActuatorTool(
       return executeActuatorCommand({
         action: params.action,
         blockId: params.block_id,
+        cwd,
         hardware,
         mqttBridge,
         params: params.params ?? {},
@@ -634,16 +681,17 @@ function createRequestBlockInfoTool(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function createHardwareTools(
+  cwd: string,
   hardware: HardwareStore,
   mqttBridge: AihubMqttBridge | null,
 ): ToolDefinition<any, any, any>[] {
   const tools: ToolDefinition<any, any, any>[] = [
-    ...createPresetActuatorTools(hardware, mqttBridge),
+    ...createPresetActuatorTools(cwd, hardware, mqttBridge),
     createListBlocksTool(hardware),
     createGetSensorDataTool(hardware),
     createGetCameraSnapshotTool(hardware),
     createGetLatestVoiceInputTool(hardware),
-    createControlActuatorTool(hardware, mqttBridge),
+    createControlActuatorTool(cwd, hardware, mqttBridge),
   ]
 
   if (mqttBridge?.isEnabled()) {

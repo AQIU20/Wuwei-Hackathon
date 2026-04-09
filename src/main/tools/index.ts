@@ -16,7 +16,7 @@ export function createCustomTools(ctx: ToolContext): ToolDefinition<any, any, an
     ...createHardwareEventTools(ctx.hardwareEvents),
     ...createAiNodeTools(ctx),
     ...createCameraVisionTools(ctx),
-    ...createHardwareTools(ctx.hardware, ctx.mqttBridge ?? null),
-    ...createDeviceTools(ctx.hardware, ctx.mqttBridge ?? null),
+    ...createHardwareTools(ctx.cwd, ctx.hardware, ctx.mqttBridge ?? null),
+    ...createDeviceTools(ctx.cwd, ctx.hardware, ctx.mqttBridge ?? null),
   ]
 }
