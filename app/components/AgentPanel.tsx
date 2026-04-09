@@ -93,11 +93,64 @@ type AgentMemory = {
 
 const AGENT_SERVER_URL = getAgentServerUrl();
 
+/* ── Mock hardware data (used when backend is unreachable) ── */
+
+function useMockSnapshot(realSnapshot: HardwareSnapshot | null): HardwareSnapshot | null {
+  const [mock, setMock] = useState<HardwareSnapshot | null>(null);
+
+  useEffect(() => {
+    if (realSnapshot) return; // backend connected, no mock needed
+
+    function drift(base: number, range: number, min: number, max: number) {
+      return Math.max(min, Math.min(max, base + (Math.random() - 0.5) * range));
+    }
+
+    setMock({
+      metrics: { temp: 24.3, humidity: 58, bpm: 72, hcho: 0.023 },
+      blocks: [
+        { block_id: "env_01", type: "sensor", capability: "environment", battery: 92, status: "online", latest: { temp_c: 24.3, humidity_pct: 58 } },
+        { block_id: "hr_01", type: "sensor", capability: "heart_rate_oximeter", battery: 85, status: "online", latest: { heart_rate_bpm: 72, spo2: 98 } },
+        { block_id: "cam_01", type: "stream", capability: "camera", battery: 78, status: "online" },
+        { block_id: "imu_01", type: "sensor", capability: "imu", battery: 95, status: "online", latest: { gyro_x: 0.3, gyro_y: -0.1, gyro_z: 0.05 } },
+        { block_id: "gas_01", type: "sensor", capability: "air_quality", battery: 88, status: "online", latest: { hcho_mg: 0.023, aqi: 42 } },
+        { block_id: "light_01", type: "actuator", capability: "light", battery: 100, status: "online", actuator: { light: { r: 255, g: 180, b: 80, brightness: 65, pattern: "warm_white" } } },
+      ],
+    });
+
+    const id = setInterval(() => {
+      setMock(prev => {
+        if (!prev) return prev;
+        const m = prev.metrics;
+        const temp = drift(m.temp!, 0.4, 18, 35);
+        const humidity = drift(m.humidity!, 1.2, 30, 80);
+        const bpm = drift(m.bpm!, 3, 55, 100);
+        const hcho = drift(m.hcho!, 0.003, 0.005, 0.08);
+        return {
+          ...prev,
+          metrics: { temp, humidity, bpm, hcho },
+          blocks: prev.blocks.map(b => {
+            if (b.capability === "environment") return { ...b, latest: { temp_c: temp, humidity_pct: humidity } };
+            if (b.capability === "heart_rate_oximeter") return { ...b, latest: { heart_rate_bpm: bpm, spo2: drift(98, 0.5, 94, 100) } };
+            if (b.capability === "air_quality") return { ...b, latest: { hcho_mg: hcho, aqi: drift(42, 3, 20, 80) } };
+            if (b.capability === "imu") return { ...b, latest: { gyro_x: drift(0, 8, -30, 30), gyro_y: drift(0, 5, -20, 20), gyro_z: drift(0, 2, -10, 10) } };
+            return b;
+          }),
+        };
+      });
+    }, 1200);
+
+    return () => clearInterval(id);
+  }, [realSnapshot]);
+
+  return realSnapshot ?? mock;
+}
+
 export function AgentPanel() {
   const { locale, t } = useI18n();
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [snapshot, setSnapshot] = useState<HardwareSnapshot | null>(null);
+  const [rawSnapshot, setRawSnapshot] = useState<HardwareSnapshot | null>(null);
+  const snapshot = useMockSnapshot(rawSnapshot);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "streaming" | "submitted">(
     "idle",
@@ -165,7 +218,7 @@ export function AgentPanel() {
           (payload.type === "snapshot" || payload.type === "update") &&
           payload.payload
         ) {
-          setSnapshot(payload.payload);
+          setRawSnapshot(payload.payload);
         }
       } catch {
         // Ignore invalid websocket payloads from other clients.
