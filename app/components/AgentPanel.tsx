@@ -93,33 +93,31 @@ type AgentMemory = {
 
 const AGENT_SERVER_URL = getAgentServerUrl();
 
-/* ── Mock hardware data (used when backend is unreachable) ── */
+/* ── Mock hardware data (always runs, used as fallback when backend is offline) ── */
 
-function useMockSnapshot(realSnapshot: HardwareSnapshot | null): HardwareSnapshot | null {
-  const [mock, setMock] = useState<HardwareSnapshot | null>(null);
+const MOCK_INITIAL: HardwareSnapshot = {
+  metrics: { temp: 24.3, humidity: 58, bpm: 72, hcho: 0.023 },
+  blocks: [
+    { block_id: "env_01", type: "sensor", capability: "environment", battery: 92, status: "online", latest: { temp_c: 24.3, humidity_pct: 58 } },
+    { block_id: "hr_01", type: "sensor", capability: "heart_rate_oximeter", battery: 85, status: "online", latest: { heart_rate_bpm: 72, spo2: 98 } },
+    { block_id: "cam_01", type: "stream", capability: "camera", battery: 78, status: "online" },
+    { block_id: "imu_01", type: "sensor", capability: "imu", battery: 95, status: "online", latest: { gyro_x: 0.3, gyro_y: -0.1, gyro_z: 0.05 } },
+    { block_id: "gas_01", type: "sensor", capability: "air_quality", battery: 88, status: "online", latest: { hcho_mg: 0.023, aqi: 42 } },
+    { block_id: "light_01", type: "actuator", capability: "light", battery: 100, status: "online", actuator: { light: { r: 255, g: 180, b: 80, brightness: 65, pattern: "warm_white" } } },
+  ],
+};
 
+function drift(base: number, range: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, base + (Math.random() - 0.5) * range));
+}
+
+function useMockSnapshot(realSnapshot: HardwareSnapshot | null): HardwareSnapshot {
+  const [mock, setMock] = useState<HardwareSnapshot>(MOCK_INITIAL);
+
+  // Always tick mock data — no dependency on realSnapshot so the interval is stable
   useEffect(() => {
-    if (realSnapshot) return; // backend connected, no mock needed
-
-    function drift(base: number, range: number, min: number, max: number) {
-      return Math.max(min, Math.min(max, base + (Math.random() - 0.5) * range));
-    }
-
-    setMock({
-      metrics: { temp: 24.3, humidity: 58, bpm: 72, hcho: 0.023 },
-      blocks: [
-        { block_id: "env_01", type: "sensor", capability: "environment", battery: 92, status: "online", latest: { temp_c: 24.3, humidity_pct: 58 } },
-        { block_id: "hr_01", type: "sensor", capability: "heart_rate_oximeter", battery: 85, status: "online", latest: { heart_rate_bpm: 72, spo2: 98 } },
-        { block_id: "cam_01", type: "stream", capability: "camera", battery: 78, status: "online" },
-        { block_id: "imu_01", type: "sensor", capability: "imu", battery: 95, status: "online", latest: { gyro_x: 0.3, gyro_y: -0.1, gyro_z: 0.05 } },
-        { block_id: "gas_01", type: "sensor", capability: "air_quality", battery: 88, status: "online", latest: { hcho_mg: 0.023, aqi: 42 } },
-        { block_id: "light_01", type: "actuator", capability: "light", battery: 100, status: "online", actuator: { light: { r: 255, g: 180, b: 80, brightness: 65, pattern: "warm_white" } } },
-      ],
-    });
-
     const id = setInterval(() => {
       setMock(prev => {
-        if (!prev) return prev;
         const m = prev.metrics;
         const temp = drift(m.temp!, 0.4, 18, 35);
         const humidity = drift(m.humidity!, 1.2, 30, 80);
@@ -138,9 +136,8 @@ function useMockSnapshot(realSnapshot: HardwareSnapshot | null): HardwareSnapsho
         };
       });
     }, 1200);
-
     return () => clearInterval(id);
-  }, [realSnapshot]);
+  }, []);
 
   return realSnapshot ?? mock;
 }
