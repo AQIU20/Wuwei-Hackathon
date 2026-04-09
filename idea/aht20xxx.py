@@ -386,12 +386,87 @@ def command_pixel(client: NodeMqttClient, fill: Optional[str], pixels: Optional[
     return 0
 
 
+def command_imu(client: NodeMqttClient, timeout: float, json_only: bool) -> int:
+    topic = client.publish_info_request()
+    if not json_only:
+        print(f"published: {topic}")
+
+    envelope = wait_for_envelope(client, "/info", timeout)
+    if envelope is None:
+        print("timed out waiting for info response", file=sys.stderr)
+        return 1
+
+    payload = envelope["payload"]
+    imu = payload.get("imu")
+    if not isinstance(imu, dict):
+        print("imu field missing in device status response", file=sys.stderr)
+        return 1
+
+    emit_output(imu, json_only)
+    return 0
+
+
+def command_hr(client: NodeMqttClient, timeout: float, json_only: bool) -> int:
+    topic = client.publish_info_request()
+    if not json_only:
+        print(f"published: {topic}")
+
+    envelope = wait_for_envelope(client, "/info", timeout)
+    if envelope is None:
+        print("timed out waiting for info response", file=sys.stderr)
+        return 1
+
+    payload = envelope["payload"]
+    hr = payload.get("hr")
+    if not isinstance(hr, dict):
+        print("hr field missing in device status response", file=sys.stderr)
+        return 1
+
+    emit_output(hr, json_only)
+    return 0
+
+
+def command_sensor(client: NodeMqttClient, count: int, timeout: float, json_only: bool) -> int:
+    if not json_only:
+        print(
+            f"waiting for {count} sensor/data message(s) from {client.node_id} (timeout {timeout:.1f}s each)..."
+        )
+
+    received = 0
+    deadline = time.monotonic() + timeout * count
+    while received < count and time.monotonic() < deadline:
+        remaining = max(0.0, deadline - time.monotonic())
+        message = client.wait_for_topic_suffix("/data", min(timeout, remaining))
+        if message is None:
+            break
+
+        received += 1
+        if json_only:
+            print(
+                json.dumps(
+                    {"topic": message.topic, "payload": message.json() or message.payload_text},
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            data = message.json()
+            if data:
+                pretty_print_json(data)
+            else:
+                print(f"[{message.topic}] {message.payload_text}")
+
+    if received == 0:
+        print("timed out — no sensor/data message received", file=sys.stderr)
+        return 1
+    return 0
+
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Query status/env data and actively control WS2812 for the ESP32-C3 MQTT node"
     )
-    parser.add_argument("action", choices=["status", "env", "ws2812", "raw", "pixel", "watch"], help="Action to perform")
+    parser.add_argument("action", choices=["status", "env", "ws2812", "raw", "pixel", "watch", "imu", "hr", "sensor"], help="Action to perform")
     parser.add_argument("--node-id", required=True, help="Target node id, for example heap_c13de8")
     parser.add_argument("--host", default=DEFAULT_BROKER_HOST, help=f"MQTT broker host, default {DEFAULT_BROKER_HOST}")
     parser.add_argument("--port", type=int, default=DEFAULT_BROKER_PORT, help=f"MQTT broker port, default {DEFAULT_BROKER_PORT}")
@@ -407,6 +482,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--json-only", action="store_true", help="Print machine-friendly compact JSON only")
     parser.add_argument("--fill", help="Raw fill color in the form r,g,b, for example 255,0,0")
     parser.add_argument("--pixels", help="Raw pixel list in the form index:r,g,b;index:r,g,b")
+    parser.add_argument("--sensor-count", type=int, default=1, help="Number of sensor/data messages to collect for the sensor action")
     return parser
 
 
@@ -446,6 +522,12 @@ def main() -> int:
             return command_raw(client, args.fill, args.pixels, args.timeout, args.json_only)
         if args.action == "pixel":
             return command_pixel(client, args.fill, args.pixels, args.timeout, args.json_only)
+        if args.action == "imu":
+            return command_imu(client, args.timeout, args.json_only)
+        if args.action == "hr":
+            return command_hr(client, args.timeout, args.json_only)
+        if args.action == "sensor":
+            return command_sensor(client, args.sensor_count, args.timeout, args.json_only)
 
         parser.error(f"unsupported action: {args.action}")
         return 2

@@ -240,7 +240,16 @@ Recommended request fields:
 
 ## Direct Heart-Rate Ingress
 
-For mock or external wearable heart-rate samples that should bypass MQTT and land directly in both live state and Supabase:
+For mock or external wearable heart-rate samples that should bypass MQTT and land directly in both live state and Supabase.
+
+This is not the primary path for the ESP32 HR node anymore. For real hardware such as `hr_8fcba4`, prefer the MQTT subscription path:
+
+- firmware publishes to `aihub/sensor/{node_id}/data`
+- the server MQTT bridge subscribes to `aihub/sensor/#`
+- incoming envelopes update `HardwareStore`, write raw `hardware_events`, and persist derived `hardware_history`
+- helper-backed direct reads use `idea/aht20xxx.py hr|sensor|watch ...`
+
+Use the HTTP ingress below only for mocks, replay, or external devices that cannot publish MQTT directly:
 
 ```bash
 curl -X POST http://localhost:8787/v1/heart-rate/ingress \

@@ -43,6 +43,9 @@ Use list_blocks to discover available hardware.
 Use get_sensor_data for current readings.
 Use get_ai_node_status for direct node status from the current MQTT server when the user asks about nodes like heap_c13de8 or led_fd8480.
 Use get_ai_node_env for direct temperature/humidity reads from helper-script-backed nodes.
+Use get_ai_node_imu for direct accelerometer/gyroscope reads from helper-script-backed IMU nodes.
+Use get_ai_node_hr for direct heart-rate and SpO2 reads from helper-script-backed HR nodes.
+Use stream_ai_node_sensor and watch_ai_node when you need to verify live subscription traffic or collect fresh sensor pushes from the MQTT stream.
 Use set_ai_node_ws2812 and set_ai_node_raw when the user wants to control helper-script-backed WS2812 nodes on the new server.
 Use get_latest_voice_input for the most recent microphone transcript or partial utterance.
 Use get_latest_heart_reading for the newest heart-rate or SpO2 sample from the live store.

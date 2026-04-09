@@ -9,7 +9,7 @@ import type { ToolContext } from '../types'
 const execFileAsync = promisify(execFile)
 
 const DEFAULT_TIMEOUT_MS = 12_000
-const DEFAULT_HELPER_NODE_IDS = ['heap_c13de8', 'led_fd8480']
+const DEFAULT_HELPER_NODE_IDS = ['heap_c13de8', 'led_fd8480', 'hr_8fcba4', 'imu_8fcba4']
 const FALLBACK_PYTHON_BINS = ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3']
 
 const nodeStatusSchema = Type.Object({
@@ -22,6 +22,51 @@ const nodeEnvSchema = Type.Object({
   node_id: Type.String({
     description: 'Target node id, for example "heap_c13de8".',
   }),
+})
+
+const nodeImuSchema = Type.Object({
+  node_id: Type.String({
+    description: 'Target IMU node id, for example "imu_8fcba4".',
+  }),
+})
+
+const nodeHrSchema = Type.Object({
+  node_id: Type.String({
+    description: 'Target heart-rate node id, for example "hr_8fcba4".',
+  }),
+})
+
+const nodeSensorSchema = Type.Object({
+  node_id: Type.String({
+    description: 'Target node id, for example "hr_8fcba4", "imu_8fcba4", or "heap_c13de8".',
+  }),
+  sensor_count: Type.Optional(
+    Type.Number({
+      description: 'How many live sensor/data pushes to collect. Defaults to 1.',
+      minimum: 1,
+      maximum: 20,
+    }),
+  ),
+  timeout_seconds: Type.Optional(
+    Type.Number({
+      description: 'Per-message wait timeout in seconds. Defaults to 8.',
+      minimum: 1,
+      maximum: 60,
+    }),
+  ),
+})
+
+const nodeWatchSchema = Type.Object({
+  node_id: Type.String({
+    description: 'Target node id to watch, for example "hr_8fcba4".',
+  }),
+  watch_seconds: Type.Optional(
+    Type.Number({
+      description: 'How long to watch node events. Defaults to 10 seconds.',
+      minimum: 1,
+      maximum: 120,
+    }),
+  ),
 })
 
 const ws2812EffectSchema = Type.Union(
@@ -92,6 +137,10 @@ const nodeRawSchema = Type.Object({
 
 type NodeStatusParams = Static<typeof nodeStatusSchema>
 type NodeEnvParams = Static<typeof nodeEnvSchema>
+type NodeImuParams = Static<typeof nodeImuSchema>
+type NodeHrParams = Static<typeof nodeHrSchema>
+type NodeSensorParams = Static<typeof nodeSensorSchema>
+type NodeWatchParams = Static<typeof nodeWatchSchema>
 type NodeWs2812Params = Static<typeof nodeWs2812Schema>
 type NodeRawParams = Static<typeof nodeRawSchema>
 
@@ -148,7 +197,7 @@ function normalizeOptionalBrightnessByte(value: unknown): number | undefined {
 
 export function buildNodeCommandArgs(
   scriptPath: string,
-  command: 'status' | 'env' | 'ws2812' | 'raw',
+  command: 'status' | 'env' | 'imu' | 'hr' | 'sensor' | 'watch' | 'ws2812' | 'raw',
   params: {
     nodeId: string
     brightness?: number
@@ -156,8 +205,11 @@ export function buildNodeCommandArgs(
     fill?: string
     hue?: number
     pixels?: string
+    sensorCount?: number
     speed?: number
     stringPayload?: boolean
+    timeout?: number
+    watchSeconds?: number
   },
 ): string[] {
   const args = [scriptPath, command, '--node-id', params.nodeId, '--json-only']
@@ -187,7 +239,52 @@ export function buildNodeCommandArgs(
     }
   }
 
+  if (
+    (command === 'status' ||
+      command === 'env' ||
+      command === 'imu' ||
+      command === 'hr' ||
+      command === 'sensor') &&
+    typeof params.timeout === 'number'
+  ) {
+    args.push('--timeout', String(params.timeout))
+  }
+
+  if (command === 'sensor' && typeof params.sensorCount === 'number') {
+    args.push('--sensor-count', String(params.sensorCount))
+  }
+
+  if (command === 'watch' && typeof params.watchSeconds === 'number') {
+    args.push('--watch-seconds', String(params.watchSeconds))
+  }
+
   return args
+}
+
+function parseJsonOrNdjsonOutput(output: string): unknown {
+  const trimmed = output.trim()
+  if (!trimmed) {
+    throw new Error('The node helper script returned no stdout')
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    const lines = trimmed
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    if (lines.length === 0) {
+      throw new Error('The node helper script returned no stdout')
+    }
+
+    try {
+      return lines.map((line) => JSON.parse(line) as unknown)
+    } catch {
+      throw new Error(`Failed to parse helper JSON output: ${trimmed}`)
+    }
+  }
 }
 
 async function runNodeScript(args: string[]): Promise<unknown> {
@@ -199,11 +296,7 @@ async function runNodeScript(args: string[]): Promise<unknown> {
     throw new Error(stderr.trim() || 'The node helper script returned no stdout')
   }
 
-  try {
-    return JSON.parse(trimmed) as unknown
-  } catch {
-    throw new Error(`Failed to parse helper JSON output: ${trimmed}`)
-  }
+  return parseJsonOrNdjsonOutput(trimmed)
 }
 
 export async function runNodeScriptForCwd(cwd: string, args: string[]): Promise<unknown> {
@@ -303,7 +396,16 @@ function formatToolResult(summary: string, payload: unknown): string {
 
 export function createAiNodeTools(
   ctx: ToolContext,
-): ToolDefinition<typeof nodeStatusSchema | typeof nodeEnvSchema | typeof nodeWs2812Schema | typeof nodeRawSchema>[] {
+): ToolDefinition<
+  | typeof nodeStatusSchema
+  | typeof nodeEnvSchema
+  | typeof nodeImuSchema
+  | typeof nodeHrSchema
+  | typeof nodeSensorSchema
+  | typeof nodeWatchSchema
+  | typeof nodeWs2812Schema
+  | typeof nodeRawSchema
+>[] {
   const scriptPath = getScriptPath(ctx.cwd)
 
   return [
@@ -379,6 +481,188 @@ export function createAiNodeTools(
               {
                 type: 'text',
                 text: `Error fetching env data for "${params.node_id}": ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            details: undefined,
+            isError: true,
+          }
+        }
+      },
+    },
+    {
+      name: 'get_ai_node_imu',
+      label: 'Get AI Node IMU',
+      description:
+        'Call the Python helper script to fetch the latest IMU reading from a node like imu_8fcba4 directly from the MQTT subscription path.',
+      promptSnippet: 'Get the latest accelerometer and gyroscope reading from a specific AI node.',
+      promptGuidelines: [
+        'Use this for explicit IMU requests such as acceleration, gyroscope, orientation, or motion checks.',
+        'This directly queries the current MQTT server instead of relying only on cached state.',
+      ],
+      parameters: nodeImuSchema,
+      async execute(_id: string, params: NodeImuParams) {
+        try {
+          const result = await runNodeScript(
+            buildNodeCommandArgs(scriptPath, 'imu', { nodeId: params.node_id }),
+          )
+          return {
+            content: [
+              {
+                type: 'text',
+                text: formatToolResult(`IMU reading for ${params.node_id}:`, result),
+              },
+            ],
+            details: undefined,
+          }
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error fetching IMU data for "${params.node_id}": ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            details: undefined,
+            isError: true,
+          }
+        }
+      },
+    },
+    {
+      name: 'get_ai_node_hr',
+      label: 'Get AI Node Heart Rate',
+      description:
+        'Call the Python helper script to fetch the latest heart-rate and SpO2 reading from a node like hr_8fcba4 directly from MQTT.',
+      promptSnippet: 'Get the latest heart-rate and oxygen reading from a specific AI node.',
+      promptGuidelines: [
+        'Use this when the user asks for live heart-rate, SpO2, raw IR, or raw RED readings from a helper-backed HR node.',
+        'Prefer this when you need the latest direct device reading rather than only the cached server state.',
+      ],
+      parameters: nodeHrSchema,
+      async execute(_id: string, params: NodeHrParams) {
+        try {
+          const result = await runNodeScript(
+            buildNodeCommandArgs(scriptPath, 'hr', { nodeId: params.node_id }),
+          )
+          return {
+            content: [
+              {
+                type: 'text',
+                text: formatToolResult(`Heart-rate reading for ${params.node_id}:`, result),
+              },
+            ],
+            details: undefined,
+          }
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error fetching heart-rate data for "${params.node_id}": ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            details: undefined,
+            isError: true,
+          }
+        }
+      },
+    },
+    {
+      name: 'stream_ai_node_sensor',
+      label: 'Stream AI Node Sensor',
+      description:
+        'Collect one or more live sensor/data pushes from a helper-backed node directly from the MQTT subscription stream.',
+      promptSnippet: 'Collect recent live sensor/data messages from a specific AI node.',
+      promptGuidelines: [
+        'Use this when the user wants fresh live pushes instead of a one-shot status snapshot.',
+        'Works for env, imu, and hr nodes as long as the node is publishing sensor/data messages.',
+      ],
+      parameters: nodeSensorSchema,
+      async execute(_id: string, params: NodeSensorParams) {
+        try {
+          const result = await runNodeScript(
+            buildNodeCommandArgs(scriptPath, 'sensor', {
+              nodeId: params.node_id,
+              sensorCount:
+                typeof params.sensor_count === 'number' && Number.isFinite(params.sensor_count)
+                  ? Math.min(Math.max(Math.floor(params.sensor_count), 1), 20)
+                  : undefined,
+              timeout:
+                typeof params.timeout_seconds === 'number' &&
+                Number.isFinite(params.timeout_seconds)
+                  ? Math.min(Math.max(params.timeout_seconds, 1), 60)
+                  : undefined,
+            }),
+          )
+          return {
+            content: [
+              {
+                type: 'text',
+                text: formatToolResult(`Live sensor stream for ${params.node_id}:`, result),
+              },
+            ],
+            details: undefined,
+          }
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error streaming sensor data for "${params.node_id}": ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              },
+            ],
+            details: undefined,
+            isError: true,
+          }
+        }
+      },
+    },
+    {
+      name: 'watch_ai_node',
+      label: 'Watch AI Node Events',
+      description:
+        'Watch all live MQTT messages for one helper-backed node for a short window. Use this for ingress debugging and direct subscription checks.',
+      promptSnippet: 'Watch recent MQTT events for a specific AI node.',
+      promptGuidelines: [
+        'Use this when you need to confirm whether a node is publishing online, heartbeat, sensor, or response traffic.',
+        'This is better than guessing whether the subscription chain is active.',
+      ],
+      parameters: nodeWatchSchema,
+      async execute(_id: string, params: NodeWatchParams) {
+        try {
+          const result = await runNodeScript(
+            buildNodeCommandArgs(scriptPath, 'watch', {
+              nodeId: params.node_id,
+              watchSeconds:
+                typeof params.watch_seconds === 'number' &&
+                Number.isFinite(params.watch_seconds)
+                  ? Math.min(Math.max(params.watch_seconds, 1), 120)
+                  : 10,
+            }),
+          )
+          return {
+            content: [
+              {
+                type: 'text',
+                text: formatToolResult(`Watch output for ${params.node_id}:`, result),
+              },
+            ],
+            details: undefined,
+          }
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: `Error watching node "${params.node_id}": ${
                   error instanceof Error ? error.message : String(error)
                 }`,
               },

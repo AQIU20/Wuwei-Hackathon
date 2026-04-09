@@ -60,6 +60,60 @@ describe('buildNodeCommandArgs', () => {
     ])
   })
 
+  it('builds an hr command with timeout override', () => {
+    expect(
+      buildNodeCommandArgs('/tmp/aht20xxx.py', 'hr', {
+        nodeId: 'hr_8fcba4',
+        timeout: 12,
+      }),
+    ).toEqual([
+      '/tmp/aht20xxx.py',
+      'hr',
+      '--node-id',
+      'hr_8fcba4',
+      '--json-only',
+      '--timeout',
+      '12',
+    ])
+  })
+
+  it('builds a sensor streaming command with count and timeout', () => {
+    expect(
+      buildNodeCommandArgs('/tmp/aht20xxx.py', 'sensor', {
+        nodeId: 'hr_8fcba4',
+        sensorCount: 3,
+        timeout: 9,
+      }),
+    ).toEqual([
+      '/tmp/aht20xxx.py',
+      'sensor',
+      '--node-id',
+      'hr_8fcba4',
+      '--json-only',
+      '--timeout',
+      '9',
+      '--sensor-count',
+      '3',
+    ])
+  })
+
+  it('builds a watch command with watch duration', () => {
+    expect(
+      buildNodeCommandArgs('/tmp/aht20xxx.py', 'watch', {
+        nodeId: 'hr_8fcba4',
+        watchSeconds: 15,
+      }),
+    ).toEqual([
+      '/tmp/aht20xxx.py',
+      'watch',
+      '--node-id',
+      'hr_8fcba4',
+      '--json-only',
+      '--watch-seconds',
+      '15',
+    ])
+  })
+
   it('prefers an absolute python3 fallback when no env override is set', () => {
     const previous = process.env.AI_NODE_PYTHON_BIN
     delete process.env.AI_NODE_PYTHON_BIN
