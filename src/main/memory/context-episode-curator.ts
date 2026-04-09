@@ -222,13 +222,24 @@ function buildMockEpisodesFromEvents(
   const existingRestingEpisode = recentEpisodes.find(
     (episode) => episode.context_type === 'resting_heart_monitoring',
   )
-  if (existingRestingEpisode) return []
+
+  const latestHeartEventAt = heartEvents[0]?.event.recordedAt
+  const earliestHeartEventAt = heartEvents[heartEvents.length - 1]?.event.recordedAt
+  if (!latestHeartEventAt || !earliestHeartEventAt) return []
+
+  if (existingRestingEpisode) {
+    const existingEndAt = Date.parse(existingRestingEpisode.end_at)
+    const latestEventAt = Date.parse(latestHeartEventAt)
+    if (!Number.isNaN(existingEndAt) && !Number.isNaN(latestEventAt) && latestEventAt <= existingEndAt) {
+      return []
+    }
+  }
 
   return [
     {
       confidence: 0.82,
       context_type: 'resting_heart_monitoring',
-      end_at: heartEvents[0]?.event.recordedAt,
+      end_at: latestHeartEventAt,
       evidence: {
         avg_bpm: Math.round(avgBpm),
         avg_spo2: Math.round(avgSpo2),
@@ -236,7 +247,7 @@ function buildMockEpisodesFromEvents(
         node_ids: [...new Set(heartEvents.map((item) => item.event.nodeId))],
       },
       room_id: null,
-      start_at: heartEvents[heartEvents.length - 1]?.event.recordedAt,
+      start_at: existingRestingEpisode?.start_at ?? earliestHeartEventAt,
       summary: `Heart-rate monitoring showed a sustained resting range around ${Math.round(avgBpm)} bpm with oxygen saturation near ${Math.round(avgSpo2)}%.`,
     },
   ].slice(0, maxEpisodes)
