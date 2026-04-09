@@ -76,13 +76,14 @@ describe('SupabaseMemoryService', () => {
 
     const service = new SupabaseMemoryService({
       fetchImpl: async (input, init) => {
+        const method = init?.method ?? 'GET'
         requests.push({
           body: typeof init?.body === 'string' ? init.body : undefined,
-          method: init?.method ?? 'GET',
+          method,
           url: String(input),
         })
 
-        if (init?.method === 'GET') {
+        if (method === 'GET') {
           return Response.json([
             {
               id: 'mem-1',
