@@ -78,25 +78,56 @@ export class SupabaseMemoryService {
   async upsertMemory(row: AgentMemoryUpsert): Promise<void> {
     if (!this.enabled) return
 
-    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
-    url.searchParams.set('on_conflict', 'home_id,memory_key')
+    const normalizedHomeId = this.normalizeHomeId(row.home_id)
+    const existing = await this.findActiveMemoryByKey(row.memory_key, normalizedHomeId)
+    const updatedAt = new Date().toISOString()
 
+    if (existing) {
+      const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
+      url.searchParams.set('id', `eq.${existing.id}`)
+
+      const res = await this.fetchImpl(url.toString(), {
+        method: 'PATCH',
+        headers: {
+          ...this.buildHeaders(),
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          confidence: row.confidence,
+          evidence_count: row.evidence_count,
+          last_observed_at: row.last_observed_at,
+          memory_type: row.memory_type,
+          memory_value: row.memory_value,
+          reason: row.reason,
+          source_episode_ids: row.source_episode_ids ?? [],
+          status: row.status,
+          updated_at: updatedAt,
+        }),
+      })
+      if (!res.ok) {
+        const msg = await res.text()
+        throw new Error(`Supabase upsert update failed (${res.status}): ${msg}`)
+      }
+      return
+    }
+
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
     const res = await this.fetchImpl(url.toString(), {
       method: 'POST',
       headers: {
         ...this.buildHeaders(),
         'Content-Type': 'application/json',
-        Prefer: 'resolution=merge-duplicates',
       },
       body: JSON.stringify({
         ...row,
-        home_id: this.normalizeHomeId(row.home_id),
-        updated_at: new Date().toISOString(),
+        home_id: normalizedHomeId,
+        source_episode_ids: row.source_episode_ids ?? [],
+        updated_at: updatedAt,
       }),
     })
     if (!res.ok) {
       const msg = await res.text()
-      throw new Error(`Supabase upsert failed (${res.status}): ${msg}`)
+      throw new Error(`Supabase upsert insert failed (${res.status}): ${msg}`)
     }
   }
 
@@ -225,5 +256,29 @@ export class SupabaseMemoryService {
 
   private normalizeHomeId(homeId?: string | null): string {
     return homeId ?? DEFAULT_MEMORY_HOME_ID
+  }
+
+  private async findActiveMemoryByKey(
+    memoryKey: string,
+    homeId: string,
+  ): Promise<AgentMemoryRow | null> {
+    const url = new URL(`/rest/v1/${this.tableName}`, this.getSupabaseUrl())
+    url.searchParams.set(
+      'select',
+      'id,home_id,memory_type,memory_key,memory_value,confidence,evidence_count,last_observed_at,source_episode_ids,reason,status,created_at,updated_at',
+    )
+    url.searchParams.set('home_id', `eq.${homeId}`)
+    url.searchParams.set('memory_key', `eq.${memoryKey}`)
+    url.searchParams.set('status', 'eq.active')
+    url.searchParams.set('limit', '1')
+
+    const res = await this.fetchImpl(url.toString(), { headers: this.buildHeaders() })
+    if (!res.ok) {
+      const msg = await res.text()
+      throw new Error(`Supabase find memory failed (${res.status}): ${msg}`)
+    }
+
+    const rows = (await res.json()) as AgentMemoryRow[]
+    return rows[0] ?? null
   }
 }
