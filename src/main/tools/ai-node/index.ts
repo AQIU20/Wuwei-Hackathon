@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { promisify } from 'node:util'
 import { join } from 'node:path'
 import type { ToolDefinition } from '@mariozechner/pi-coding-agent'
@@ -9,6 +10,7 @@ const execFileAsync = promisify(execFile)
 
 const DEFAULT_TIMEOUT_MS = 12_000
 const DEFAULT_HELPER_NODE_IDS = ['heap_c13de8', 'led_fd8480']
+const FALLBACK_PYTHON_BINS = ['/usr/bin/python3', '/opt/homebrew/bin/python3', '/usr/local/bin/python3']
 
 const nodeStatusSchema = Type.Object({
   node_id: Type.String({
@@ -97,8 +99,19 @@ function getScriptPath(cwd: string): string {
   return join(cwd, 'idea', 'aht20xxx.py')
 }
 
-function getPythonBin(): string {
-  return process.env.AI_NODE_PYTHON_BIN?.trim() || 'python3'
+export function getPythonBin(): string {
+  const configured = process.env.AI_NODE_PYTHON_BIN?.trim()
+  if (configured) {
+    return configured
+  }
+
+  for (const candidate of FALLBACK_PYTHON_BINS) {
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return 'python3'
 }
 
 function getHelperNodeIds(): Set<string> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test'
-import { buildNodeCommandArgs } from './index'
+import { buildNodeCommandArgs, getPythonBin } from './index'
 
 describe('buildNodeCommandArgs', () => {
   it('builds a status command with json-only output', () => {
@@ -58,5 +58,20 @@ describe('buildNodeCommandArgs', () => {
       '--pixels',
       '0:255,0,0;1:0,255,0',
     ])
+  })
+
+  it('prefers an absolute python3 fallback when no env override is set', () => {
+    const previous = process.env.AI_NODE_PYTHON_BIN
+    delete process.env.AI_NODE_PYTHON_BIN
+
+    try {
+      expect(getPythonBin()).toBe('/usr/bin/python3')
+    } finally {
+      if (previous === undefined) {
+        delete process.env.AI_NODE_PYTHON_BIN
+      } else {
+        process.env.AI_NODE_PYTHON_BIN = previous
+      }
+    }
   })
 })
