@@ -114,4 +114,24 @@ describe('ContextEpisodeService', () => {
       { id: 'ep-2', type: 'update' },
     ])
   })
+
+  it('supports filtering by source when listing episodes', async () => {
+    let lastUrl = ''
+
+    const service = new ContextEpisodeService({
+      fetchImpl: async (input) => {
+        lastUrl = String(input)
+        return Response.json([])
+      },
+      serviceRoleKey: 'service-role',
+      supabaseUrl: 'https://example.supabase.co',
+      tableName: 'context_episodes',
+    })
+
+    await service.listEpisodes({
+      source: 'mock_good_case',
+    })
+
+    expect(lastUrl).toContain('source=eq.mock_good_case')
+  })
 })

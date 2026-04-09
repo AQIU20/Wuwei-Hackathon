@@ -80,6 +80,7 @@ export class ContextEpisodeService {
     homeId?: string | null
     limit?: number
     minutes?: number
+    source?: string
   }): Promise<ContextEpisodeRow[]> {
     if (!this.enabled) throw new Error('Supabase context episodes are not configured')
 
@@ -106,6 +107,10 @@ export class ContextEpisodeService {
 
     if (params?.contextType) {
       url.searchParams.set('context_type', `eq.${params.contextType}`)
+    }
+
+    if (params?.source) {
+      url.searchParams.set('source', `eq.${params.source}`)
     }
 
     const res = await this.fetchImpl(url.toString(), { headers: this.buildHeaders() })

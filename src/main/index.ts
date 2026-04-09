@@ -14,6 +14,12 @@ import { SupabaseHistoryService } from './history/supabase-history-service'
 import { AgentMemoryCurator } from './memory/agent-memory-curator'
 import { ContextEpisodeCurator } from './memory/context-episode-curator'
 import { ContextEpisodeService } from './memory/context-episode-service'
+import {
+  isGoodCaseEpisode,
+  isGoodCaseMemory,
+  mixGoodCases,
+  seedGoodCaseFixtures,
+} from './memory/good-case-fixtures'
 import { PreferenceMemoryService } from './memory/preference-memory-service'
 import { SupabaseMemoryService } from './memory/supabase-memory-service'
 import { ConfigService } from './providers/config-service'
@@ -82,6 +88,7 @@ let agentMemorySyncPending = false
 let agentMemorySyncRunning = false
 let debugCuratorRunPending = false
 let debugCuratorRunRunning = false
+let goodCaseSeedPromise: Promise<void> | null = null
 type WebSocketConnection = { send: (data: string) => void }
 const BunRuntime = globalThis as unknown as {
   Bun: {
@@ -167,6 +174,25 @@ async function syncAgentMemoriesFromEpisodes(): Promise<void> {
 
 const unsubscribeContextEpisodeChanges = contextEpisodes.onEpisodeChanged(() => {
   void syncAgentMemoriesFromEpisodes()
+})
+
+function ensureGoodCaseFixturesSeeded(): Promise<void> {
+  if (!contextEpisodes.isEnabled() || !supabaseMemory.isEnabled()) {
+    return Promise.resolve()
+  }
+
+  if (!goodCaseSeedPromise) {
+    goodCaseSeedPromise = seedGoodCaseFixtures(contextEpisodes, supabaseMemory).catch((error) => {
+      goodCaseSeedPromise = null
+      throw error
+    })
+  }
+
+  return goodCaseSeedPromise
+}
+
+void ensureGoodCaseFixturesSeeded().catch((error) => {
+  console.error('[good-case] seed failed:', error)
 })
 
 async function runDebugCuratorsInBackground(): Promise<void> {
@@ -492,13 +518,15 @@ app.get('/v1/context-episodes', async (c) => {
   )
 
   try {
+    await ensureGoodCaseFixturesSeeded()
     const items = await contextEpisodes.listEpisodes({
       contextType,
-      limit,
+      limit: Math.max(limit + 10, 20),
       minutes,
     })
 
-    return c.json({ count: items.length, items })
+    const mixedItems = mixGoodCases(items, isGoodCaseEpisode, limit)
+    return c.json({ count: mixedItems.length, items: mixedItems })
   } catch (error) {
     return c.json(
       {
@@ -1041,9 +1069,12 @@ app.get('/v1/memories', async (c) => {
     return c.json({ error: 'Memory service unavailable' }, 503)
   }
 
+  const limit = Math.min(Math.max(Number(c.req.query('limit') || 20), 1), 100)
+
   try {
+    await ensureGoodCaseFixturesSeeded()
     const items = await supabaseMemory.listMemories()
-    return c.json({ items })
+    return c.json({ items: mixGoodCases(items, isGoodCaseMemory, limit) })
   } catch (error) {
     return c.json(
       { error: error instanceof Error ? error.message : 'Failed to list memories' },
