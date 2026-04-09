@@ -231,26 +231,22 @@ async function withTimeout<T>(label: string, timeoutMs: number, task: Promise<T>
   }
 }
 
-function overlapsOrTouches(
-  startAt: string,
-  endAt: string,
-  existing: ContextEpisodeRow,
-  mergeGapMs: number,
-): boolean {
-  const nextStart = Date.parse(startAt)
-  const nextEnd = Date.parse(endAt)
-  const currentStart = Date.parse(existing.start_at)
-  const currentEnd = Date.parse(existing.end_at)
-
-  if ([nextStart, nextEnd, currentStart, currentEnd].some((value) => Number.isNaN(value))) {
-    return false
-  }
-
-  return nextStart <= currentEnd + mergeGapMs && nextEnd >= currentStart - mergeGapMs
-}
-
 function toNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+function getLatestEpisodeEndAt(episodes: ContextEpisodeRow[]): number | null {
+  let latest: number | null = null
+
+  for (const episode of episodes) {
+    const parsed = Date.parse(episode.end_at)
+    if (Number.isNaN(parsed)) continue
+    if (latest === null || parsed > latest) {
+      latest = parsed
+    }
+  }
+
+  return latest
 }
 
 function buildMockEpisodesFromEvents(
@@ -327,7 +323,6 @@ export class ContextEpisodeCurator {
   private lastError: string | null = null
   private lastRunAt: string | null = null
   private readonly maxEpisodes: number
-  private readonly mergeGapMs = 15 * 60_000
   private readonly minutes: number
   private readonly llmTimeoutMs: number
   private readonly runTimeoutMs: number
@@ -423,18 +418,27 @@ export class ContextEpisodeCurator {
         }),
       ])
 
-      if (events.samples.length < 3) return
+      const latestEpisodeEndAt = getLatestEpisodeEndAt(recentEpisodes)
+      const freshEvents =
+        latestEpisodeEndAt === null
+          ? events.samples
+          : events.samples.filter((event) => {
+              const recordedAt = Date.parse(event.recordedAt)
+              return !Number.isNaN(recordedAt) && recordedAt > latestEpisodeEndAt
+            })
+
+      if (freshEvents.length < 3) return
 
       const promptPayload = {
         currentTime: new Date().toISOString(),
         recentEpisodes: recentEpisodes.map(compactEpisode),
-        recentHardwareEvents: events.samples.map(compactEventForPrompt),
+        recentHardwareEvents: freshEvents.map(compactEventForPrompt),
       }
 
       let rawCandidates: CuratedEpisodeCandidate[] = []
       if (mockMode) {
         rawCandidates = buildMockEpisodesFromEvents(
-          events.samples,
+          freshEvents,
           recentEpisodes,
           this.maxEpisodes,
         )
@@ -475,7 +479,7 @@ export class ContextEpisodeCurator {
 
       if (rawCandidates.length === 0) {
         rawCandidates = buildMockEpisodesFromEvents(
-          events.samples,
+          freshEvents,
           recentEpisodes,
           this.maxEpisodes,
         )
@@ -487,13 +491,22 @@ export class ContextEpisodeCurator {
           const summary = item.summary?.trim()
           if (!summary) return null
 
+          const freshWindowStart =
+            freshEvents[freshEvents.length - 1]?.recordedAt ?? new Date().toISOString()
+          const freshWindowEnd = freshEvents[0]?.recordedAt ?? freshWindowStart
           const startAt = normalizeIsoTime(
             item.start_at,
-            events.samples[events.samples.length - 1]?.recordedAt ?? new Date().toISOString(),
+            freshWindowStart,
           )
-          const endAt = normalizeIsoTime(item.end_at, events.samples[0]?.recordedAt ?? startAt)
-          const normalizedStart = Date.parse(startAt) <= Date.parse(endAt) ? startAt : endAt
-          const normalizedEnd = Date.parse(endAt) >= Date.parse(startAt) ? endAt : startAt
+          const endAt = normalizeIsoTime(item.end_at, freshWindowEnd)
+          const boundedStartAt =
+            Date.parse(startAt) < Date.parse(freshWindowStart) ? freshWindowStart : startAt
+          const boundedEndAt =
+            Date.parse(endAt) > Date.parse(freshWindowEnd) ? freshWindowEnd : endAt
+          const normalizedStart =
+            Date.parse(boundedStartAt) <= Date.parse(boundedEndAt) ? boundedStartAt : boundedEndAt
+          const normalizedEnd =
+            Date.parse(boundedEndAt) >= Date.parse(boundedStartAt) ? boundedEndAt : boundedStartAt
 
           return {
             confidence: clampConfidence(item.confidence),
@@ -508,28 +521,6 @@ export class ContextEpisodeCurator {
         .filter((item): item is NonNullable<typeof item> => Boolean(item))
 
       for (const item of candidates) {
-        const existing = recentEpisodes.find(
-          (episode) =>
-            episode.context_type === item.context_type &&
-            overlapsOrTouches(item.start_at, item.end_at, episode, this.mergeGapMs),
-        )
-
-        if (existing) {
-          await this.options.contextEpisodes.updateEpisode(existing.id, {
-            confidence: Math.max(existing.confidence, item.confidence),
-            end_at:
-              Date.parse(item.end_at) > Date.parse(existing.end_at) ? item.end_at : existing.end_at,
-            evidence: item.evidence,
-            room_id: item.room_id,
-            start_at:
-              Date.parse(item.start_at) < Date.parse(existing.start_at)
-                ? item.start_at
-                : existing.start_at,
-            summary: item.summary,
-          })
-          continue
-        }
-
         const created = await this.options.contextEpisodes.insertEpisode({
           home_id: null,
           room_id: item.room_id,
