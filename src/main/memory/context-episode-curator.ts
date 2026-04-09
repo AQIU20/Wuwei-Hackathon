@@ -32,6 +32,20 @@ interface ContextEpisodeCuratorOptions {
 
 const DEFAULT_LLM_TIMEOUT_MS = 45_000
 const DEFAULT_RUN_TIMEOUT_MS = 60_000
+const DEFAULT_EVENT_LIMIT = 60
+const MAX_PROMPT_ARRAY_ITEMS = 5
+const MAX_PROMPT_OBJECT_KEYS = 20
+const MAX_PROMPT_STRING_LENGTH = 160
+const OMITTED_PROMPT_PAYLOAD_KEYS = new Set([
+  'audio_base64',
+  'audio_bytes',
+  'frame_base64',
+  'image_base64',
+  'image_bytes',
+  'pcm_base64',
+  'raw_audio',
+  'raw_image',
+])
 
 const CURATOR_PROMPT = `You build context episodes from recent smart-home / wearable hardware events.
 
@@ -107,14 +121,67 @@ function normalizeContextType(value: string | undefined, summary: string): strin
   return normalized || 'unknown_context'
 }
 
-function compactEvent(sample: HardwareEventSample): Record<string, unknown> {
+function truncatePromptString(value: string): string {
+  if (value.length <= MAX_PROMPT_STRING_LENGTH) return value
+  return `${value.slice(0, MAX_PROMPT_STRING_LENGTH)}…(${value.length} chars)`
+}
+
+export function summarizePayloadForPrompt(value: unknown, key?: string, depth = 0): unknown {
+  if (value === null || value === undefined) return value
+
+  if (typeof value === 'string') {
+    if (key && OMITTED_PROMPT_PAYLOAD_KEYS.has(key)) {
+      return `[omitted ${key}; ${value.length} chars]`
+    }
+    return truncatePromptString(value)
+  }
+
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return value
+  }
+
+  if (Array.isArray(value)) {
+    const items = value
+      .slice(0, MAX_PROMPT_ARRAY_ITEMS)
+      .map((item) => summarizePayloadForPrompt(item, undefined, depth + 1))
+
+    if (value.length > MAX_PROMPT_ARRAY_ITEMS) {
+      items.push(`[${value.length - MAX_PROMPT_ARRAY_ITEMS} more items omitted]`)
+    }
+
+    return items
+  }
+
+  if (typeof value !== 'object') {
+    return String(value)
+  }
+
+  if (depth >= 4) {
+    return '[object omitted at max depth]'
+  }
+
+  const entries = Object.entries(value)
+  const summary: Record<string, unknown> = {}
+
+  for (const [entryKey, entryValue] of entries.slice(0, MAX_PROMPT_OBJECT_KEYS)) {
+    summary[entryKey] = summarizePayloadForPrompt(entryValue, entryKey, depth + 1)
+  }
+
+  if (entries.length > MAX_PROMPT_OBJECT_KEYS) {
+    summary.__omitted_keys = entries.length - MAX_PROMPT_OBJECT_KEYS
+  }
+
+  return summary
+}
+
+export function compactEventForPrompt(sample: HardwareEventSample): Record<string, unknown> {
   return {
     capability: sample.capability,
     confidence: sample.confidence,
     eventTsMs: sample.eventTsMs,
     nodeId: sample.nodeId,
     nodeType: sample.nodeType,
-    payload: sample.payload,
+    payload: summarizePayloadForPrompt(sample.payload),
     recordedAt: sample.recordedAt,
     scope: sample.scope,
     signalName: sample.signalName,
@@ -254,6 +321,7 @@ function buildMockEpisodesFromEvents(
 }
 
 export class ContextEpisodeCurator {
+  private readonly eventLimit: number
   private intervalHandle: Timer | null = null
   private readonly intervalMs: number
   private lastError: string | null = null
@@ -268,6 +336,10 @@ export class ContextEpisodeCurator {
   constructor(private options: ContextEpisodeCuratorOptions) {
     this.intervalMs =
       options.intervalMs ?? Number(process.env.CONTEXT_EPISODE_INTERVAL_MS || 60_000)
+    this.eventLimit = Math.max(
+      10,
+      Number(process.env.CONTEXT_EPISODE_EVENT_LIMIT || DEFAULT_EVENT_LIMIT),
+    )
     this.llmTimeoutMs = Math.max(
       1_000,
       Number(process.env.CONTEXT_EPISODE_LLM_TIMEOUT_MS || DEFAULT_LLM_TIMEOUT_MS),
@@ -301,6 +373,7 @@ export class ContextEpisodeCurator {
   getStatus() {
     return {
       enabled: this.options.hardwareEvents.isEnabled() && this.options.contextEpisodes.isEnabled(),
+      eventLimit: this.eventLimit,
       intervalMs: this.intervalMs,
       lastError: this.lastError,
       lastRunAt: this.lastRunAt,
@@ -341,7 +414,7 @@ export class ContextEpisodeCurator {
     try {
       const [events, recentEpisodes] = await Promise.all([
         this.options.hardwareEvents.queryEvents({
-          limit: 180,
+          limit: this.eventLimit,
           minutes: this.minutes,
         }),
         this.options.contextEpisodes.listEpisodes({
@@ -355,7 +428,7 @@ export class ContextEpisodeCurator {
       const promptPayload = {
         currentTime: new Date().toISOString(),
         recentEpisodes: recentEpisodes.map(compactEpisode),
-        recentHardwareEvents: events.samples.map(compactEvent),
+        recentHardwareEvents: events.samples.map(compactEventForPrompt),
       }
 
       let rawCandidates: CuratedEpisodeCandidate[] = []
