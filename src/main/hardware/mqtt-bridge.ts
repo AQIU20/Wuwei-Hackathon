@@ -108,6 +108,7 @@ function inferNodeType(nodeId: string, payload: Record<string, unknown>): AihubN
     case 'imu':
     case 'pir':
     case 'baro':
+    case 'hr':
     case 'hrox':
     case 'env':
     case 'gas':
@@ -133,6 +134,7 @@ function inferCapability(nodeType: AihubNodeType | null): string {
       return 'environment'
     case 'gas':
       return 'air_quality'
+    case 'hr':
     case 'hrox':
       return 'heart_rate_oximeter'
     case 'pir':
@@ -386,7 +388,9 @@ export class AihubMqttBridge {
         payload.hue = params.hue
       }
       if (typeof params.speed_ms === 'number' && Number.isFinite(params.speed_ms)) {
-        payload.speed_ms = params.speed_ms
+        payload.speed = params.speed_ms
+      } else if (typeof params.speed === 'number' && Number.isFinite(params.speed)) {
+        payload.speed = params.speed
       }
       return this.publishLegacy(blockId, 'ws2812', JSON.stringify(payload))
     }
