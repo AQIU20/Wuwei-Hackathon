@@ -59,3 +59,52 @@ describe('HardwareStore voice state', () => {
     })
   })
 })
+
+describe('HardwareStore camera snapshot state', () => {
+  it('stores camera snapshots with image metadata and exposes the latest state', () => {
+    const store = new HardwareStore()
+
+    store.upsertCameraSnapshot({
+      analysisText: 'desk with monitor and keyboard',
+      blockId: 'cam_01',
+      confidence: 0.88,
+      imageUrl: 'https://cdn.example/cam_01/snap-1.jpg',
+      mimeType: 'image/jpeg',
+      sizeBytes: 48291,
+      snapshotId: 'snap-1',
+      timestampMs: 1_700_000_100_000,
+      trigger: true,
+      width: 1280,
+      height: 720,
+    })
+
+    const byBlock = store.getCameraScene('cam_01')
+    expect(byBlock).not.toBeNull()
+    expect(byBlock?.scene).toBe('desk with monitor and keyboard')
+    expect(byBlock?.state.snapshot_id).toBe('snap-1')
+    expect(byBlock?.state.image_url).toBe('https://cdn.example/cam_01/snap-1.jpg')
+    expect(byBlock?.state.mime_type).toBe('image/jpeg')
+    expect(byBlock?.state.width).toBe(1280)
+    expect(byBlock?.state.height).toBe(720)
+
+    const block = store.getBlock('cam_01')
+    expect(block?.type).toBe('stream')
+    expect(block?.capability).toBe('camera')
+    expect(block?.scene).toBe('desk with monitor and keyboard')
+    expect(block?.latest).toEqual({
+      analysis_text: 'desk with monitor and keyboard',
+      captured_at: '2023-11-14T22:15:00.000Z',
+      confidence: 0.88,
+      image_base64: null,
+      image_url: 'https://cdn.example/cam_01/snap-1.jpg',
+      mime_type: 'image/jpeg',
+      size_bytes: 48291,
+      snapshot_id: 'snap-1',
+      trigger: true,
+      triggered_at: '2023-11-14T22:15:00.000Z',
+      updated_at: '2023-11-14T22:15:00.000Z',
+      width: 1280,
+      height: 720,
+    })
+  })
+})

@@ -132,6 +132,25 @@ interface VoiceIngressBody {
   wakeword?: string | null
 }
 
+interface CameraIngressBody {
+  analysis_text?: string | null
+  chip?: string
+  confidence?: number | null
+  event_id?: string
+  firmware?: string
+  height?: number | null
+  image_base64?: string | null
+  image_url?: string | null
+  mime_type?: string | null
+  node_id?: string
+  size_bytes?: number | null
+  snapshot_id?: string
+  timestamp_ms?: number
+  trigger?: boolean
+  width?: number | null
+  scene?: string | null
+}
+
 function pruneSeenVoiceUtterances(now = Date.now()): void {
   const ttlMs = 6 * 60 * 60 * 1000
   for (const [key, seenAt] of seenVoiceUtterances.entries()) {
@@ -408,6 +427,103 @@ app.post('/v1/voice/ingress', async (c) => {
     session_id: sessionId,
     state: voiceState.state,
     utterance_id: utteranceId,
+  })
+})
+
+app.post('/v1/camera/ingress', async (c) => {
+  const body = (await c.req.json()) as CameraIngressBody
+  const nodeId = body.node_id?.trim()
+
+  if (!nodeId) {
+    return c.json({ error: 'node_id is required' }, 400)
+  }
+
+  const snapshotId = body.snapshot_id?.trim() || `snap-${randomUUID()}`
+  const eventId = body.event_id?.trim() || `camera-${randomUUID()}`
+  const timestampMs =
+    typeof body.timestamp_ms === 'number' && Number.isFinite(body.timestamp_ms)
+      ? body.timestamp_ms
+      : Date.now()
+  const analysisText = body.analysis_text?.trim() || body.scene?.trim() || null
+  const trigger = body.trigger === true
+
+  const cameraState = hardware.upsertCameraSnapshot({
+    analysisText,
+    blockId: nodeId,
+    chip: body.chip?.trim() || undefined,
+    confidence: body.confidence ?? null,
+    firmware: body.firmware?.trim() || undefined,
+    height: body.height ?? null,
+    imageBase64: body.image_base64 ?? null,
+    imageUrl: body.image_url ?? null,
+    mimeType: body.mime_type ?? null,
+    sizeBytes: body.size_bytes ?? null,
+    snapshotId,
+    timestampMs,
+    trigger,
+    width: body.width ?? null,
+  })
+
+  if (hardwareEvents.isEnabled()) {
+    void hardwareEvents
+      .insertDirectEvent({
+        capability: 'camera',
+        chip_family: null,
+        confidence:
+          typeof body.confidence === 'number' && Number.isFinite(body.confidence)
+            ? body.confidence
+            : null,
+        event_ts_ms: timestampMs,
+        home_id: null,
+        ingest_trace_id: snapshotId,
+        mac_suffix: null,
+        meta: {
+          has_analysis_text: analysisText !== null,
+          has_image_base64: typeof body.image_base64 === 'string' && body.image_base64.length > 0,
+          has_image_url: typeof body.image_url === 'string' && body.image_url.length > 0,
+          ingress: 'direct_http_camera',
+        },
+        msg_id: eventId,
+        node_id: nodeId,
+        node_type: 'cam',
+        payload: {
+          analysis_text: analysisText,
+          height:
+            typeof body.height === 'number' && Number.isFinite(body.height) ? body.height : null,
+          image_base64: body.image_base64 ?? null,
+          image_url: body.image_url ?? null,
+          mime_type: body.mime_type ?? null,
+          size_bytes:
+            typeof body.size_bytes === 'number' && Number.isFinite(body.size_bytes)
+              ? body.size_bytes
+              : null,
+          snapshot_id: snapshotId,
+          trigger,
+          width:
+            typeof body.width === 'number' && Number.isFinite(body.width) ? body.width : null,
+        },
+        protocol_version: 1,
+        recorded_at: new Date(timestampMs).toISOString(),
+        room_id: null,
+        scope: 'vision',
+        signal_name: trigger ? 'triggered_snapshot' : 'snapshot',
+        source: 'direct_camera_ingress',
+        status: null,
+        subject: 'snapshot',
+        success: null,
+        topic: `direct/vision/${nodeId}/snapshot`,
+        type: 'camera_snapshot_final',
+      })
+      .catch((error) => {
+        console.error('[camera] direct event persist failed:', error)
+      })
+  }
+
+  return c.json({
+    ok: true,
+    block: cameraState.block,
+    snapshot_id: snapshotId,
+    state: cameraState.state,
   })
 })
 

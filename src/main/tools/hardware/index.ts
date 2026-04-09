@@ -350,7 +350,7 @@ function createGetCameraSnapshotTool(
     name: 'get_camera_snapshot',
     label: 'Get Camera Snapshot',
     description:
-      'Return the latest camera snapshot/scene description currently cached for a camera block.',
+      'Return the latest camera snapshot currently cached for a camera block, including analysis text and any stored image metadata.',
     promptSnippet: 'Capture and analyze a camera snapshot.',
     promptGuidelines: [
       'Use list_blocks to confirm the camera block_id before calling this tool',
@@ -410,6 +410,17 @@ function createGetCameraSnapshotTool(
             type: 'text',
             text: [
               `Camera snapshot from ${params.block_id} at ${new Date().toISOString()}`,
+              '',
+              `Snapshot ID: ${result.state.snapshot_id}`,
+              `Trigger: ${result.state.trigger}`,
+              `Image URL: ${result.state.image_url ?? 'n/a'}`,
+              `Image MIME: ${result.state.mime_type ?? 'n/a'}`,
+              `Image Size: ${result.state.size_bytes ?? 'n/a'}`,
+              `Image Dimensions: ${
+                result.state.width && result.state.height
+                  ? `${result.state.width}x${result.state.height}`
+                  : 'n/a'
+              }`,
               '',
               'Scene description (vision analysis):',
               result.scene,

@@ -156,4 +156,70 @@ describe('SupabaseHistoryService', () => {
       Date.now = originalNow
     }
   })
+
+  it('persists camera snapshot metadata in history payloads', async () => {
+    const requests: Array<Array<Record<string, unknown>>> = []
+
+    const service = new SupabaseHistoryService({
+      fetchImpl: async (_input, init) => {
+        requests.push(JSON.parse(String(init?.body ?? '[]')) as Array<Record<string, unknown>>)
+        return new Response('', { status: 201 })
+      },
+      persistIntervalMs: 15_000,
+      serviceRoleKey: 'service-role',
+      supabaseUrl: 'https://example.supabase.co',
+      tableName: 'hardware_history',
+    })
+
+    await service.persistSnapshot(
+      createSnapshot({
+        blocks: [
+          {
+            battery: 100,
+            block_id: 'cam_01',
+            capability: 'camera',
+            chip: 'ESP32-S3',
+            firmware: '1.0.0',
+            last_seen_ms: 1_712_345_679_500,
+            latest: {
+              analysis_text: 'desk with monitor and keyboard',
+              captured_at: '2026-04-08T00:00:00.000Z',
+              confidence: 0.88,
+              image_url: 'https://cdn.example/cam_01/snap-1.jpg',
+              mime_type: 'image/jpeg',
+              size_bytes: 48291,
+              snapshot_id: 'snap-1',
+              trigger: true,
+              width: 1280,
+              height: 720,
+            },
+            scene: 'desk with monitor and keyboard',
+            status: 'online',
+            type: 'stream',
+          },
+        ],
+      }),
+      'direct_camera_ingress',
+    )
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toHaveLength(1)
+    expect(requests[0]?.[0]?.block_id).toBe('cam_01')
+    expect(requests[0]?.[0]?.source).toBe('direct_camera_ingress')
+    expect(requests[0]?.[0]?.payload).toEqual({
+      latest: {
+        analysis_text: 'desk with monitor and keyboard',
+        captured_at: '2026-04-08T00:00:00.000Z',
+        confidence: 0.88,
+        image_url: 'https://cdn.example/cam_01/snap-1.jpg',
+        mime_type: 'image/jpeg',
+        size_bytes: 48291,
+        snapshot_id: 'snap-1',
+        trigger: true,
+        width: 1280,
+        height: 720,
+      },
+      scene: 'desk with monitor and keyboard',
+    })
+  })
 })

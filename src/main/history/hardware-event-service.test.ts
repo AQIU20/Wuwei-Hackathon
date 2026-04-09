@@ -144,4 +144,64 @@ describe('HardwareEventService', () => {
     expect(row?.signal_name).toBe('triggered_transcript')
     expect(row?.source).toBe('direct_voice_ingress')
   })
+
+  it('writes direct camera ingress events into the hardware_events table', async () => {
+    const requests: Array<{ body?: string; method: string; url: string }> = []
+
+    const service = new HardwareEventService({
+      fetchImpl: async (input, init) => {
+        requests.push({
+          body: typeof init?.body === 'string' ? init.body : undefined,
+          method: init?.method ?? 'GET',
+          url: String(input),
+        })
+
+        return new Response('', { status: 201 })
+      },
+      serviceRoleKey: 'service-role',
+      supabaseUrl: 'https://example.supabase.co',
+      tableName: 'hardware_events',
+    })
+
+    await service.insertDirectEvent({
+      capability: 'camera',
+      chip_family: null,
+      confidence: 0.88,
+      event_ts_ms: 1_712_345_678_901,
+      home_id: null,
+      ingest_trace_id: 'snap-123',
+      mac_suffix: null,
+      meta: { ingress: 'direct_http_camera', has_image_url: true },
+      msg_id: 'camera-evt-1',
+      node_id: 'cam_01',
+      node_type: 'cam',
+      payload: {
+        analysis_text: 'desk with monitor and keyboard',
+        image_url: 'https://cdn.example/cam_01/snap-123.jpg',
+        mime_type: 'image/jpeg',
+        size_bytes: 48291,
+        snapshot_id: 'snap-123',
+        trigger: true,
+      },
+      protocol_version: 1,
+      recorded_at: '2026-04-08T00:00:00.000Z',
+      room_id: null,
+      scope: 'vision',
+      signal_name: 'triggered_snapshot',
+      source: 'direct_camera_ingress',
+      status: null,
+      subject: 'snapshot',
+      success: null,
+      topic: 'direct/vision/cam_01/snapshot',
+      type: 'camera_snapshot_final',
+    })
+
+    expect(requests).toHaveLength(1)
+    const [row] = JSON.parse(requests[0]?.body ?? '[]') as Array<Record<string, unknown>>
+    expect(row?.node_id).toBe('cam_01')
+    expect(row?.scope).toBe('vision')
+    expect(row?.capability).toBe('camera')
+    expect(row?.signal_name).toBe('triggered_snapshot')
+    expect(row?.source).toBe('direct_camera_ingress')
+  })
 })

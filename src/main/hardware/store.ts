@@ -43,6 +43,22 @@ export interface VoiceState {
   wakeword: string | null
 }
 
+export interface CameraSnapshotState {
+  analysis_text: string | null
+  captured_at: string
+  confidence: number | null
+  image_base64: string | null
+  image_url: string | null
+  mime_type: string | null
+  size_bytes: number | null
+  snapshot_id: string
+  trigger: boolean
+  triggered_at: string | null
+  updated_at: string
+  width: number | null
+  height: number | null
+}
+
 export interface HardwareSnapshot {
   actuatorState: ActuatorState
   blocks: BlockSnapshot[]
@@ -165,7 +181,7 @@ export class HardwareStore {
     vibration: { active: false, pattern: null, intensity: 0 },
   }
   private blocks = new Map<string, BlockSnapshot>()
-  private cameraScenes = new Map<string, string>()
+  private cameraSnapshots = new Map<string, CameraSnapshotState>()
   private listeners = new Set<Listener>()
   private readonly nodeDescriptions: Record<string, string>
   private readonly nodeLabels: Record<string, string>
@@ -194,7 +210,7 @@ export class HardwareStore {
       ...block,
       latest: this.getLatestForBlock(block.block_id),
       actuator: this.getActuatorStateForBlock(block.block_id),
-      scene: this.cameraScenes.get(block.block_id),
+      scene: this.cameraSnapshots.get(block.block_id)?.analysis_text ?? undefined,
     }))
 
     const metricSource = blocks
@@ -346,16 +362,90 @@ export class HardwareStore {
     }
   }
 
-  getCameraScene(blockId: string): { block: BlockSnapshot; scene: string } | null {
+  upsertCameraSnapshot(args: {
+    analysisText?: string | null
+    blockId: string
+    chip?: string
+    confidence?: number | null
+    firmware?: string
+    imageBase64?: string | null
+    imageUrl?: string | null
+    mimeType?: string | null
+    sizeBytes?: number | null
+    snapshotId: string
+    timestampMs?: number
+    trigger?: boolean
+    width?: number | null
+    height?: number | null
+  }): { block: BlockSnapshot; state: CameraSnapshotState } {
+    const timestampMs =
+      typeof args.timestampMs === 'number' && Number.isFinite(args.timestampMs)
+        ? args.timestampMs
+        : Date.now()
+    const updatedAt = new Date(timestampMs).toISOString()
+    const existingBlock = this.blocks.get(args.blockId)
+    const existingState = this.cameraSnapshots.get(args.blockId)
+    const normalizedAnalysisText = args.analysisText?.trim() || null
+
+    const cameraState: CameraSnapshotState = {
+      analysis_text: normalizedAnalysisText,
+      captured_at: updatedAt,
+      confidence:
+        typeof args.confidence === 'number' && Number.isFinite(args.confidence)
+          ? args.confidence
+          : (existingState?.confidence ?? null),
+      image_base64: args.imageBase64?.trim() || null,
+      image_url: args.imageUrl?.trim() || null,
+      mime_type: args.mimeType?.trim() || existingState?.mime_type || null,
+      size_bytes:
+        typeof args.sizeBytes === 'number' && Number.isFinite(args.sizeBytes)
+          ? args.sizeBytes
+          : (existingState?.size_bytes ?? null),
+      snapshot_id: args.snapshotId,
+      trigger: args.trigger === true,
+      triggered_at: args.trigger === true ? updatedAt : (existingState?.triggered_at ?? null),
+      updated_at: updatedAt,
+      width:
+        typeof args.width === 'number' && Number.isFinite(args.width)
+          ? args.width
+          : (existingState?.width ?? null),
+      height:
+        typeof args.height === 'number' && Number.isFinite(args.height)
+          ? args.height
+          : (existingState?.height ?? null),
+    }
+
+    this.blocks.set(args.blockId, {
+      block_id: args.blockId,
+      battery: existingBlock?.battery ?? 100,
+      capability: existingBlock?.capability ?? 'camera',
+      chip: args.chip ?? existingBlock?.chip ?? 'external',
+      firmware: args.firmware ?? existingBlock?.firmware ?? 'camera-ingress@1',
+      last_seen_ms: timestampMs,
+      status: 'online',
+      type: 'stream',
+    })
+    this.cameraSnapshots.set(args.blockId, cameraState)
+    this.broadcast({ type: 'update', payload: this.getSnapshot() })
+
+    return {
+      block: this.getBlock(args.blockId) as BlockSnapshot,
+      state: { ...cameraState },
+    }
+  }
+
+  getCameraScene(blockId: string): { block: BlockSnapshot; scene: string; state: CameraSnapshotState } | null {
     const block = this.blocks.get(blockId)
     if (!block || block.capability !== 'camera') return null
 
-    const scene = this.cameraScenes.get(blockId)
-    if (!scene) return null
+    const state = this.cameraSnapshots.get(blockId)
+    const scene = state?.analysis_text
+    if (!state || !scene) return null
 
     return {
       block,
       scene,
+      state: { ...state },
     }
   }
 
@@ -452,9 +542,25 @@ export class HardwareStore {
       case 'snapshot': {
         const block = this.blocks.get(message.block_id)
         if (!block) return { ok: false, error: `Unknown block: ${message.block_id}`, ackId }
-        block.last_seen_ms = message.timestamp ?? Date.now()
+        const timestampMs = message.timestamp ?? Date.now()
+        const updatedAt = new Date(timestampMs).toISOString()
+        block.last_seen_ms = timestampMs
         block.status = 'online'
-        this.cameraScenes.set(message.block_id, message.scene)
+        this.cameraSnapshots.set(message.block_id, {
+          analysis_text: message.scene,
+          captured_at: updatedAt,
+          confidence: null,
+          image_base64: null,
+          image_url: null,
+          mime_type: null,
+          size_bytes: null,
+          snapshot_id: `mqtt-${ackId}`,
+          trigger: false,
+          triggered_at: null,
+          updated_at: updatedAt,
+          width: null,
+          height: null,
+        })
         break
       }
       case 'actuator_state':
@@ -508,6 +614,11 @@ export class HardwareStore {
       return this.toVoiceLatest(voiceState)
     }
 
+    const cameraState = this.cameraSnapshots.get(blockId)
+    if (cameraState) {
+      return this.toCameraLatest(cameraState)
+    }
+
     return this.sensorReadings.get(blockId)
   }
 
@@ -524,6 +635,24 @@ export class HardwareStore {
       updated_at: state.updated_at,
       utterance_id: state.utterance_id,
       wakeword: state.wakeword,
+    }
+  }
+
+  private toCameraLatest(state: CameraSnapshotState): Record<string, unknown> {
+    return {
+      analysis_text: state.analysis_text,
+      captured_at: state.captured_at,
+      confidence: state.confidence,
+      image_base64: state.image_base64,
+      image_url: state.image_url,
+      mime_type: state.mime_type,
+      size_bytes: state.size_bytes,
+      snapshot_id: state.snapshot_id,
+      trigger: state.trigger,
+      triggered_at: state.triggered_at,
+      updated_at: state.updated_at,
+      width: state.width,
+      height: state.height,
     }
   }
 

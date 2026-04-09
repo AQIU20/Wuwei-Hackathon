@@ -200,6 +200,42 @@ Recommended request fields:
 - `trigger`: `true` only when this utterance should become a user command
 - `confidence`, `language`, `wakeword`, `timestamp_ms`: optional metadata
 
+## Direct Camera Ingress
+
+For camera snapshots that should bypass MQTT and land directly in both live state and Supabase:
+
+```bash
+curl -X POST http://localhost:8787/v1/camera/ingress \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "node_id": "cam_01",
+    "snapshot_id": "snap-0001",
+    "event_id": "evt-cam-0001",
+    "analysis_text": "desk with monitor and keyboard",
+    "image_url": "https://cdn.example/cam_01/snap-0001.jpg",
+    "mime_type": "image/jpeg",
+    "width": 1280,
+    "height": 720,
+    "size_bytes": 48291,
+    "confidence": 0.88,
+    "trigger": true,
+    "timestamp_ms": 1744123456891
+  }'
+```
+
+Behavior:
+- updates the live `HardwareStore` immediately so camera tools can read the newest snapshot
+- writes an async `hardware_events` row with the original snapshot payload and metadata
+- writes `hardware_history` rows through the existing snapshot persistence path
+
+Recommended request fields:
+- `node_id`: stable camera ID, for example `cam_01`
+- `snapshot_id`: stable per captured image, used as the ingest trace ID
+- `event_id`: stable per POST event, used for event persistence de-duplication
+- `analysis_text`: optional vision analysis text or scene summary
+- `image_url` or `image_base64`: the actual image reference or encoded image payload
+- `mime_type`, `width`, `height`, `size_bytes`, `confidence`, `trigger`, `timestamp_ms`: optional metadata
+
 ## Tech Stack
 
 - Hardware: ESP32-S3 / ESP32-C3, POGO-pin magnetic connectors
