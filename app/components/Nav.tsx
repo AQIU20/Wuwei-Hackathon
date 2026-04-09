@@ -9,11 +9,12 @@ import { LanguageToggle } from "./LanguageToggle";
 import { MagneticButton } from "./MagneticButton";
 
 export function Nav() {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const pathname = usePathname();
 
   const links = [
     { href: "/", label: t.nav.home },
+    { href: "/signals", label: locale === "zh" ? "实时信号" : "Signals" },
     { href: "/agent", label: t.nav.agent },
     { href: "/dev", label: t.nav.dev },
     { href: "/dev/docs", label: t.nav.docs },
