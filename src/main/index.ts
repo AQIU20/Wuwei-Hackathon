@@ -304,6 +304,46 @@ app.get('/ready', (c) => {
   )
 })
 
+app.post('/v1/debug/curators/reset', (c) => {
+  contextEpisodeCurator.reset('manual debug reset')
+  agentMemories.reset('manual debug reset')
+  return c.json({
+    ok: true,
+    agentMemories: agentMemories.getStatus(),
+    contextEpisodeCurator: contextEpisodeCurator.getStatus(),
+  })
+})
+
+app.post('/v1/debug/curators/run-once', async (c) => {
+  const startedAt = new Date().toISOString()
+  contextEpisodeCurator.reset('manual debug run')
+  agentMemories.reset('manual debug run')
+
+  try {
+    await contextEpisodeCurator.runOnce()
+    await agentMemories.runOnce()
+    return c.json({
+      ok: true,
+      agentMemories: agentMemories.getStatus(),
+      contextEpisodeCurator: contextEpisodeCurator.getStatus(),
+      finishedAt: new Date().toISOString(),
+      startedAt,
+    })
+  } catch (error) {
+    return c.json(
+      {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+        agentMemories: agentMemories.getStatus(),
+        contextEpisodeCurator: contextEpisodeCurator.getStatus(),
+        finishedAt: new Date().toISOString(),
+        startedAt,
+      },
+      500,
+    )
+  }
+})
+
 app.get('/v1/blocks', (c) => c.json(hardware.getSnapshot()))
 
 app.get('/v1/blocks/:blockId', (c) => {

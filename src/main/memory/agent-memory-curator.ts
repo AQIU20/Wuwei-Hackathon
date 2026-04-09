@@ -250,6 +250,11 @@ export class AgentMemoryCurator {
     }
   }
 
+  reset(reason = 'manual reset'): void {
+    this.lastError = reason
+    this.running = false
+  }
+
   async runOnce(): Promise<void> {
     if (this.running) return
     if (!this.options.contextEpisodes.isEnabled()) return
@@ -302,31 +307,40 @@ export class AgentMemoryCurator {
       } else {
         const liveAuth = auth
         if (!liveAuth) return
-        rawCandidates =
-          safeJsonParse<CuratorResult>(
-            extractTextFromResponse(
-              await withTimeout(
-                'agent memory LLM call',
-                this.llmTimeoutMs,
-                complete(
-                  liveAuth.model,
-                  {
-                    systemPrompt: CURATOR_PROMPT,
-                    messages: [
-                      {
-                        role: 'user',
-                        content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
-                        timestamp: Date.now(),
-                      },
-                    ],
-                  },
-                  {
-                    apiKey: liveAuth.apiKey,
-                  },
+        try {
+          rawCandidates =
+            safeJsonParse<CuratorResult>(
+              extractTextFromResponse(
+                await withTimeout(
+                  'agent memory LLM call',
+                  this.llmTimeoutMs,
+                  complete(
+                    liveAuth.model,
+                    {
+                      systemPrompt: CURATOR_PROMPT,
+                      messages: [
+                        {
+                          role: 'user',
+                          content: [{ type: 'text', text: JSON.stringify(promptPayload, null, 2) }],
+                          timestamp: Date.now(),
+                        },
+                      ],
+                    },
+                    {
+                      apiKey: liveAuth.apiKey,
+                    },
+                  ),
                 ),
               ),
-            ),
-          )?.memories ?? []
+            )?.memories ?? []
+        } catch (error) {
+          this.lastError = error instanceof Error ? error.message : String(error)
+          console.error('[agent-memories] llm curation failed, falling back to rules:', error)
+        }
+      }
+
+      if (rawCandidates.length === 0) {
+        rawCandidates = buildMockMemoriesFromEpisodes(episodes, existing, this.maxMemories)
       }
 
       const candidates = rawCandidates
