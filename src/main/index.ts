@@ -79,6 +79,8 @@ let pendingHardwareEventRowsForMemoryPipeline = 0
 let memoryPipelineRunning = false
 let agentMemorySyncPending = false
 let agentMemorySyncRunning = false
+let debugCuratorRunPending = false
+let debugCuratorRunRunning = false
 type WebSocketConnection = { send: (data: string) => void }
 const BunRuntime = globalThis as unknown as {
   Bun: {
@@ -165,6 +167,28 @@ async function syncAgentMemoriesFromEpisodes(): Promise<void> {
 const unsubscribeContextEpisodeChanges = contextEpisodes.onEpisodeChanged(() => {
   void syncAgentMemoriesFromEpisodes()
 })
+
+async function runDebugCuratorsInBackground(): Promise<void> {
+  if (debugCuratorRunRunning) {
+    debugCuratorRunPending = true
+    return
+  }
+
+  debugCuratorRunRunning = true
+  try {
+    do {
+      debugCuratorRunPending = false
+      contextEpisodeCurator.reset('manual debug run')
+      agentMemories.reset('manual debug run')
+      await contextEpisodeCurator.runOnce()
+      await agentMemories.runOnce()
+    } while (debugCuratorRunPending)
+  } catch (error) {
+    console.error('[debug-curators] background run failed:', error)
+  } finally {
+    debugCuratorRunRunning = false
+  }
+}
 
 async function createSessionRuntime(): Promise<AgentRuntime> {
   const runtime = createRuntime()
@@ -300,6 +324,10 @@ app.get('/ready', (c) => {
         pending: agentMemorySyncPending,
         running: agentMemorySyncRunning,
       },
+      debugCuratorRun: {
+        pending: debugCuratorRunPending,
+        running: debugCuratorRunRunning,
+      },
       mqttBridge: mqttBridge.getStatus(),
       ok: isReady,
       workspace: paths.cwd,
@@ -318,34 +346,25 @@ app.post('/v1/debug/curators/reset', (c) => {
   })
 })
 
-app.post('/v1/debug/curators/run-once', async (c) => {
+app.post('/v1/debug/curators/run-once', (c) => {
   const startedAt = new Date().toISOString()
-  contextEpisodeCurator.reset('manual debug run')
-  agentMemories.reset('manual debug run')
+  debugCuratorRunPending = true
+  void runDebugCuratorsInBackground()
 
-  try {
-    await contextEpisodeCurator.runOnce()
-    await agentMemories.runOnce()
-    return c.json({
+  return c.json(
+    {
       ok: true,
+      accepted: true,
       agentMemories: agentMemories.getStatus(),
       contextEpisodeCurator: contextEpisodeCurator.getStatus(),
-      finishedAt: new Date().toISOString(),
-      startedAt,
-    })
-  } catch (error) {
-    return c.json(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : String(error),
-        agentMemories: agentMemories.getStatus(),
-        contextEpisodeCurator: contextEpisodeCurator.getStatus(),
-        finishedAt: new Date().toISOString(),
-        startedAt,
+      debugCuratorRun: {
+        pending: debugCuratorRunPending,
+        running: debugCuratorRunRunning,
       },
-      500,
-    )
-  }
+      startedAt,
+    },
+    202,
+  )
 })
 
 app.get('/v1/blocks', (c) => c.json(hardware.getSnapshot()))
