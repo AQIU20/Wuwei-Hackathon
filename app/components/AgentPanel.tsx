@@ -483,9 +483,9 @@ export function AgentPanel() {
             </div>
             <div className="flex flex-wrap gap-2">
               {[
-                locale === "zh" ? "把 light_01 打开，暖白色" : "Turn light_01 on with a warm white color",
-                locale === "zh" ? "把 light_01 切成彩虹模式" : "Set light_01 to rainbow mode",
-                locale === "zh" ? "把 light_01 关掉" : "Turn light_01 off",
+                "Call: set_light(mode=\"warm_white\")",
+                "Call: set_light(mode=\"rainbow\")",
+                "Call: turn_off(device=\"light_01\")",
               ].map((prompt) => (
                 <button
                   key={prompt}
@@ -724,8 +724,10 @@ function Empty({
     <div className="flex flex-1 flex-col items-start justify-center gap-5 py-8">
       <div className="font-display text-xl leading-snug text-black/80">
         {locale === "zh"
-          ? "你好呀 👋 让我帮你照看这个房间。"
-          : "Hi there 👋 let me keep an eye on your room."}
+          ? "Agent 已连接。多模态 Context 采集中。"
+          : locale === "ja"
+            ? "Agent 接続完了。マルチモーダル Context 取得中。"
+            : "Agent Connected. Multimodal Context Ingress Active."}
       </div>
       <div className="flex flex-wrap gap-2">
         {suggestions.map((s) => (
@@ -1065,8 +1067,8 @@ function getLightSummary(
 ): { detail: string; title: string } {
   if (!state || (state.brightness === 0 && state.pattern === null)) {
     return locale === "zh"
-      ? { detail: "等待 Agent 指令。试试“把灯打开”或“切成彩虹模式”。", title: "当前已关闭" }
-      : { detail: "Waiting for an agent command. Try “turn the light on” or “set rainbow mode”.", title: "Currently off" };
+      ? { detail: “等待 Open Call 指令。试试 set_light(mode=\”warm_white\”)。”, title: “当前已关闭” }
+      : { detail: “Waiting for Open Call. Try set_light(mode=\”warm_white\”).”, title: “Currently off” };
   }
 
   if (state.pattern) {
