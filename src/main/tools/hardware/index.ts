@@ -22,6 +22,14 @@ const DEFAULT_ACTUATOR_TOOL_PRESETS: ActuatorToolPreset[] = [
     blockId: 'led_fd8480',
     capability: 'light',
   },
+  {
+    name: 'heap_c13de8_light_control',
+    label: 'Heap C13DE8 Light Control',
+    description:
+      'Control the light actuator heap_c13de8. Use this tool when the user refers to the newly added light block and wants to turn it on/off, change color, or switch lighting effects.',
+    blockId: 'heap_c13de8',
+    capability: 'light',
+  },
 ]
 
 function normalizeToolName(name: string): string {

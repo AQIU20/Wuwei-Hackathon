@@ -21,6 +21,11 @@ const DEVICE_DEFINITIONS: DeviceDefinition[] = [
     label: '桌面上的灯',
     description: '放在桌面上的 WS2812 LED 灯条，可以控制颜色、亮度和动态效果',
   },
+  {
+    blockId: 'heap_c13de8',
+    label: '环形灯模块',
+    description: '环形 WS2812 灯模块，可以控制开关、颜色、亮度和动态效果',
+  },
 ]
 // ────────────────────────────────────────────────────────────────────────────
 
