@@ -492,17 +492,18 @@ export function AgentPanel() {
               <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.55),transparent_40%)]" />
               <div className="relative flex items-start justify-between gap-3">
                 <div>
-                  <p className="font-display text-lg text-black/85">
+                  <p className="font-display text-lg text-black">
                     {lightSummary.title}
                   </p>
-                  <p className="mt-1 text-xs leading-relaxed text-black/55">
+                  <p className="mt-1 text-xs leading-relaxed text-black/60">
                     {lightSummary.detail}
                   </p>
                 </div>
-                <StatusBadge
-                  active={lightBlock?.status === "online"}
-                  label={lightBlock?.status === "online" ? (locale === "zh" ? "在线" : "Online") : (locale === "zh" ? "离线" : "Offline")}
-                />
+                {lightState && lightState.brightness > 0 ? (
+                  <span className="mt-1.5 block h-3 w-3 rounded-full bg-[#ff6c37] pulse-dot" />
+                ) : (
+                  <span className="mt-1.5 block h-3 w-3 rounded-full bg-black/15" />
+                )}
               </div>
             </div>
             <div className="grid grid-cols-3 gap-2 text-[11px] text-black/55">
@@ -1142,18 +1143,13 @@ function getLightSwatchStyle(
 ): CSSProperties {
   if (!state || (state.brightness === 0 && state.pattern === null)) {
     return {
-      background:
-        "linear-gradient(135deg, rgba(15,23,42,0.92), rgba(39,39,42,0.88))",
+      background: "#f0f0f0",
     };
   }
 
-  const alpha = Math.max(0.18, state.brightness / 100);
-  const glow = `rgba(${state.r}, ${state.g}, ${state.b}, ${alpha.toFixed(2)})`;
-  const edge = `rgba(${state.r}, ${state.g}, ${state.b}, ${Math.min(alpha + 0.18, 0.92).toFixed(2)})`;
-
   return {
-    background: `linear-gradient(135deg, ${glow}, ${edge})`,
-    boxShadow: `inset 0 1px 0 rgba(255,255,255,0.22), 0 12px 32px ${glow}`,
+    background: "#ffffff",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
   };
 }
 
