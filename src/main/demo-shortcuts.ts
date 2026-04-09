@@ -19,6 +19,7 @@ interface DemoShortcut {
 
 export interface DemoShortcutMatch {
   id: string
+  lightTriggered: boolean
   promptText: string
   reply: string
 }
@@ -59,23 +60,42 @@ async function triggerShortcutLight(args: {
   hardware: HardwareStore
   mqttBridge: AihubMqttBridge | null
   shortcut: DemoShortcut
-}): Promise<void> {
+}): Promise<boolean> {
   const { blockId, action, params } = args.shortcut.lightAction
   args.hardware.controlActuator(blockId, action, params)
 
   if (isHelperBackedNodeId(blockId)) {
-    await runHelperLightAction({
-      action,
-      blockId,
-      cwd: args.cwd,
-      params,
-    })
-  } else {
-    args.hardware.controlActuator(blockId, action, params)
     if (args.mqttBridge) {
-      await args.mqttBridge.publishActuatorCommand(blockId, action, params)
+      try {
+        const result = await args.mqttBridge.publishActuatorCommand(blockId, action, params)
+        if (result) {
+          return true
+        }
+      } catch (mqttError) {
+        console.error(`[demo-shortcut] mqtt light action failed for ${blockId}:`, mqttError)
+      }
+    }
+
+    try {
+      await runHelperLightAction({
+        action,
+        blockId,
+        cwd: args.cwd,
+        params,
+      })
+      return true
+    } catch (error) {
+      console.error(`[demo-shortcut] helper light action failed for ${blockId}:`, error)
+      return false
     }
   }
+
+  if (args.mqttBridge) {
+    const result = await args.mqttBridge.publishActuatorCommand(blockId, action, params)
+    return Boolean(result)
+  }
+
+  return true
 }
 
 export async function applyDemoShortcut(args: {
@@ -93,7 +113,7 @@ export async function applyDemoShortcut(args: {
     return null
   }
 
-  await triggerShortcutLight({
+  const lightTriggered = await triggerShortcutLight({
     cwd: args.cwd,
     hardware: args.hardware,
     mqttBridge: args.mqttBridge,
@@ -102,6 +122,7 @@ export async function applyDemoShortcut(args: {
 
   return {
     id: shortcut.id,
+    lightTriggered,
     promptText: buildDemoPrompt(args.text, shortcut),
     reply: shortcut.reply,
   }
