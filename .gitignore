@@ -41,6 +41,7 @@ yarn-error.log*
 next-env.d.ts
 .unforce-make-server/
 idea/test/.venv/
+.venv-script-mic/
 
 # local model weights and processed audio/data
 data/whisper/*.bin
