@@ -5,6 +5,7 @@ import { Hono } from 'hono'
 import { createBunWebSocket } from 'hono/bun'
 import { cors } from 'hono/cors'
 import { AgentRuntime } from './agent'
+import { applyDemoShortcut } from './demo-shortcuts'
 import { isMqttHardwareMode, resolveHardwareMode } from './hardware/mode'
 import { AihubMqttBridge } from './hardware/mqtt-bridge'
 import { type HardwareIngressMessage, HardwareStore } from './hardware/store'
@@ -973,6 +974,21 @@ app.post('/v1/chat/sessions/:sessionId/messages', async (c) => {
     const runtime = await resolveRuntime(sessionId)
     const messageId = randomUUID()
     const encoder = new TextEncoder()
+    let promptText = text
+
+    try {
+      const demoShortcut = await applyDemoShortcut({
+        cwd: paths.cwd,
+        hardware,
+        mqttBridge: mqttHardwareMode ? mqttBridge : null,
+        text,
+      })
+      if (demoShortcut) {
+        promptText = demoShortcut.promptText
+      }
+    } catch (error) {
+      console.error('[demo-shortcut] failed, falling back to normal prompt:', error)
+    }
 
     const stream = new ReadableStream<Uint8Array>({
       start(controller) {
@@ -998,7 +1014,7 @@ app.post('/v1/chat/sessions/:sessionId/messages', async (c) => {
         void runtime.prompt({
           locale: body.locale,
           messageId,
-          text,
+          text: promptText,
         })
       },
       cancel() {
